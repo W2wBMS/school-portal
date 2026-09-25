@@ -1,0 +1,42 @@
+export type StudentOverview = {
+  profile: {
+    studentId?: string;
+    fullName?: string;
+    email?: string;
+    programme?: string;
+    department?: string;
+    level?: string;
+    hallResidence?: string;
+    cgpa?: number;
+    creditsCompleted?: number;
+    feeBalance?: number;
+    status?: string;
+  } | null;
+  results: ResultRow[];
+  attendance: AttendanceRow[];
+  feeLedger: FeeLedgerRow[];
+  academicSummary: AcademicSummary;
+};
+
+export type ResultRow = { grade: string; score: number; semester: string; level?: string; academicYear?: string; courseId?: { code?: string; title?: string; credits?: number } };
+export type AttendanceRow = { percentage: number; courseId?: { code?: string; title?: string } };
+export type FeeLedgerRow = { invoiceNumber: string; amountDue: number; amountPaid: number; balance: number; status: string; semester: string };
+export type AcademicSummary = { totalCredits: number; cgpa: number; semesters: Array<{ semester: string; level?: string; academicYear?: string; credits: number; gpa: number; results: ResultRow[] }> };
+
+export async function fetchStudentOverview() {
+  const token = localStorage.getItem('portal_token') || '';
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/portal/student-overview`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to fetch student overview');
+  }
+
+  return (await response.json()) as StudentOverview;
+}
