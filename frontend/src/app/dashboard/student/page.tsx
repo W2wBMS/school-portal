@@ -47,7 +47,6 @@ export default function StudentDashboardPage() {
   }
 
   const profile = overview?.profile || {};
-  const results = overview?.results || [];
   const attendance = overview?.attendance || [];
   const feeLedger = overview?.feeLedger || [];
   const averageAttendance = attendance.length ? Math.round(attendance.reduce((sum, row) => sum + Number(row.percentage || 0), 0) / attendance.length) : 0;
@@ -78,25 +77,7 @@ export default function StudentDashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
-          <h3 className="text-xl font-bold text-[#11222d]">Results</h3>
-          <div className="mt-4 space-y-3">
-            {results.length === 0 ? <p className="text-slate-500">No results found.</p> : results.map((row: StudentOverview['results'][number], index: number) => (
-              <div key={`${row.courseId?.code || 'course'}-${index}`} className="flex items-center justify-between rounded-xl bg-white p-3 ring-1 ring-slate-200">
-                <div>
-                  <div className="font-semibold text-[#11222d]">{row.courseId?.code || 'Course'} — {row.courseId?.title || 'Result'}</div>
-                  <div className="text-sm text-slate-500">{row.semester}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold text-[#0d5a4d]">{row.grade}</div>
-                  <div className="text-sm text-slate-500">{row.score}%</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <div className="grid gap-6 lg:grid-cols-1">
         <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
           <h3 className="text-xl font-bold text-[#11222d]">Attendance</h3>
           <div className="mt-4 space-y-3">

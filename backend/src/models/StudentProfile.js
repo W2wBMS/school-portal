@@ -36,15 +36,15 @@ const studentProfileSchema = new mongoose.Schema(
     },
     hallResidence: {
       type: String,
-      default: 'CRIG Hall 3, Room 14B',
+      default: '',
     },
     cgpa: {
       type: Number,
-      default: 3.84,
+      default: 0,
     },
     creditsCompleted: {
       type: Number,
-      default: 48,
+      default: 0,
     },
     feeBalance: {
       type: Number,

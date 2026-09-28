@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, BookOpen, CalendarCheck2, ClipboardList, Users } from 'lucide-react';
+import NotificationsPanel from '@/components/NotificationsPanel';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 type Course = { _id: string; code: string; title: string; credits: number; semester: string };
@@ -51,6 +52,7 @@ export default function LecturerDashboardPage() {
         <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#718183]">Teaching load</p><h3 className="mt-2 text-xl font-bold text-[#11222d]">Your active courses</h3></div><BookOpen className="text-[#0d5a4d]" size={22} /></div><div className="mt-5 space-y-3">{courses.slice(0, 4).map((course) => <div key={course._id} className="flex items-center justify-between rounded-2xl bg-white p-4 ring-1 ring-slate-200"><div><div className="font-bold text-[#11222d]">{course.code}</div><div className="mt-1 text-sm text-slate-500">{course.title}</div></div><span className="rounded-full bg-[#e6f1e9] px-3 py-1 text-xs font-bold text-[#0d5a4d]">{course.credits} credits</span></div>)}{courses.length === 0 && <p className="text-sm text-slate-500">No courses have been assigned yet.</p>}</div></div>
         <div className="rounded-[28px] bg-[#17252b] p-6 text-white"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b9d6c4]">Quick note</p><h3 className="mt-3 text-2xl font-bold">Attendance deserves a rhythm.</h3><p className="mt-3 text-sm leading-6 text-[#bfd0cb]">Keep records close to the classroom. A timely update gives students a clearer picture of their progress.</p><Link href="/dashboard/lecturer/attendance" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-[#d6b46a]">Open attendance register <ArrowUpRight size={16} /></Link></div>
       </div>
+      <NotificationsPanel title="Teaching updates" />
     </div>
   );
 }

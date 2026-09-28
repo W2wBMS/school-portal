@@ -1,9 +1,84 @@
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const User = require('../models/User');
 const StudentProfile = require('../models/StudentProfile');
 const { protect, authorize } = require('../middleware/auth');
+const { audit } = require('../utils/audit');
+const { sendPasswordResetEmail } = require('../utils/mail');
+const { z } = require('zod');
 
 const router = express.Router();
+
+function parseCsvLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values.map((value) => value.trim());
+}
+
+function normalizeCsvRow(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function saveAdmissionCsv(csv) {
+  const filePath = path.resolve(__dirname, '../../data/admissions.csv');
+  const directory = path.dirname(filePath);
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) {
+    throw new Error('The CSV must include a header row and at least one student row.');
+  }
+
+  const header = parseCsvLine(lines[0]);
+  const normalizedHeader = header.map((item) => item.trim().toLowerCase());
+  const required = ['fullname', 'name', 'student_name', 'studentname'];
+  if (!normalizedHeader.some((item) => required.includes(item)) && !normalizedHeader.includes('fullname')) {
+    throw new Error('The CSV must include a full name column such as fullName or full_name.');
+  }
+
+  const cleaned = [header.join(',')];
+  for (const line of lines.slice(1)) {
+    const cells = parseCsvLine(line);
+    if (cells.length < header.length) {
+      while (cells.length < header.length) cells.push('');
+    }
+    cleaned.push(cells.slice(0, header.length).map((cell) => {
+      const text = normalizeCsvRow(cell).replace(/"/g, '""');
+      return `"${text}"`;
+    }).join(','));
+  }
+
+  fs.writeFileSync(filePath, `${cleaned.join('\n')}\n`, 'utf8');
+  return filePath;
+}
 
 router.get('/me', protect, async (req, res) => {
   return res.json({ user: req.user });
@@ -24,7 +99,7 @@ router.post('/', protect, authorize('student_affairs', 'department_admin', 'acad
   if (requestedRole === 'student') {
     await StudentProfile.create({
       userId: user._id,
-      studentId: user.studentId || `STU-${user._id.toString().slice(-8).toUpperCase()}`,
+      studentId: user.studentId,
       fullName: user.fullName,
       email: user.email,
       programme: user.programme || undefined,
@@ -33,6 +108,115 @@ router.post('/', protect, authorize('student_affairs', 'department_admin', 'acad
     });
   }
   return res.status(201).json({ user: user.toPublicJSON() });
+});
+
+router.post('/admissions/import', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+  const importSchema = z.object({ csv: z.string().min(10) });
+  const parsed = importSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'A valid CSV string is required.' });
+  }
+
+  try {
+    const filePath = saveAdmissionCsv(parsed.data.csv);
+    return res.json({
+      message: 'Admission CSV imported successfully.',
+      filePath,
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to import CSV file.' });
+  }
+});
+
+router.post('/lecturers/import', protect, authorize('department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+  const parsed = z.object({ csv: z.string().min(10).max(2_000_000) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'A valid lecturer CSV is required.' });
+
+  const lines = parsed.data.csv.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2 || lines.length > 501) return res.status(400).json({ message: 'Provide a header and between 1 and 500 lecturer rows.' });
+  const headers = parseCsvLine(lines[0]).map((header) => header.toLowerCase().replace(/[\s_-]/g, ''));
+  const nameIndex = headers.findIndex((header) => ['fullname', 'name'].includes(header));
+  const emailIndex = headers.indexOf('email');
+  const departmentIndex = headers.indexOf('department');
+  if (nameIndex < 0 || emailIndex < 0) return res.status(400).json({ message: 'CSV headers must include fullName and email. department is optional.' });
+
+  const rows = [];
+  const rowErrors = [];
+  const seenEmails = new Set();
+  for (let index = 1; index < lines.length; index += 1) {
+    const cells = parseCsvLine(lines[index]);
+    const fullName = normalizeCsvRow(cells[nameIndex]);
+    const email = String(cells[emailIndex] || '').trim().toLowerCase();
+    const department = departmentIndex < 0 ? '' : normalizeCsvRow(cells[departmentIndex]);
+    const parsedEmail = z.string().email().safeParse(email);
+    if (!fullName || !parsedEmail.success) {
+      rowErrors.push({ row: index + 1, message: 'A full name and valid email are required.' });
+      continue;
+    }
+    if (seenEmails.has(email)) {
+      rowErrors.push({ row: index + 1, message: `Duplicate email in CSV: ${email}` });
+      continue;
+    }
+    seenEmails.add(email);
+    rows.push({ row: index + 1, fullName, email, department });
+  }
+  if (rowErrors.length) return res.status(400).json({ message: 'Fix the lecturer CSV rows and upload it again.', errors: rowErrors });
+
+  const existingUsers = await User.find({ email: { $in: rows.map((row) => row.email) } }).select('email');
+  if (existingUsers.length) {
+    return res.status(409).json({
+      message: 'Some email addresses already have accounts. Remove them or resolve them before importing.',
+      duplicates: existingUsers.map((user) => user.email),
+    });
+  }
+
+  const imported = [];
+  const errors = [];
+  const setupLinks = [];
+  for (const row of rows) {
+    const setupToken = crypto.randomBytes(32).toString('hex');
+    const user = new User({
+      fullName: row.fullName,
+      email: row.email,
+      department: row.department,
+      role: 'lecturer',
+      password: crypto.randomBytes(32).toString('hex'),
+      resetPasswordToken: crypto.createHash('sha256').update(setupToken).digest('hex'),
+      resetPasswordExpires: new Date(Date.now() + 15 * 60 * 1000),
+    });
+
+    try {
+      await user.save();
+      let emailSent = false;
+      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+        try {
+          emailSent = await sendPasswordResetEmail({ to: user.email, token: setupToken });
+        } catch (error) {
+          console.error('Lecturer setup email failed:', error.message);
+        }
+      }
+      if (!emailSent) {
+        const setupUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${encodeURIComponent(setupToken)}`;
+        setupLinks.push({ email: user.email, url: setupUrl });
+      }
+      await audit({ actorId: req.user._id, action: 'lecturer.imported', entity: 'User', entityId: user._id, after: { fullName: user.fullName, email: user.email, department: user.department, role: user.role } });
+      imported.push({ _id: user._id, fullName: user.fullName, email: user.email, department: user.department, role: user.role, status: user.status });
+    } catch (error) {
+      if (user.isNew) {
+        errors.push({ row: row.row, email: row.email, message: error.code === 11000 ? 'This email already has an account.' : 'Account could not be created.' });
+        continue;
+      }
+      errors.push({ row: row.row, email: row.email, message: 'Account was created but could not be imported cleanly.' });
+    }
+  }
+
+  return res.status(errors.length ? 207 : 201).json({
+    message: `${imported.length} lecturer account${imported.length === 1 ? '' : 's'} imported.`,
+    created: imported.length,
+    users: imported,
+    setupLinks,
+    errors,
+  });
 });
 
 router.patch('/:id', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {

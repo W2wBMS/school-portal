@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import NotificationsPanel from '@/components/NotificationsPanel';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 type Student = { _id: string; fullName: string; email: string };
@@ -16,6 +17,10 @@ export default function AdminResultsPage() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [csvText, setCsvText] = useState('studentId,studentName,courseCode,score,level,semester,academicYear\n10290001,Daniel Owusu,AGR101,88,100,Semester 1,2025/2026');
+  const [csvFileName, setCsvFileName] = useState('');
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -74,6 +79,55 @@ export default function AdminResultsPage() {
       setForm({ studentId: '', courseId: '', score: '90', level: '100', academicYear: '2025/2026', semester: 'Semester 1' });
       setShowForm(false);
     }
+  }
+
+  async function importResultsCsv(event?: React.FormEvent) {
+    event?.preventDefault();
+    if (!csvText.trim()) {
+      setError('Select a CSV file first.');
+      return;
+    }
+
+    setIsImportingCsv(true);
+    try {
+      const response = await fetch(`${API_BASE}/portal/results/import`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}`,
+        },
+        body: JSON.stringify({ csv: csvText }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.message || 'Unable to import results CSV.');
+        setNotice('');
+        return;
+      }
+
+      setError('');
+      setNotice(data.message || 'Results imported successfully.');
+      const refreshed = await fetch(`${API_BASE}/portal/results`, { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` } });
+      if (refreshed.ok) {
+        const next = await refreshed.json();
+        setResults(next.results || []);
+      }
+    } finally {
+      setIsImportingCsv(false);
+    }
+  }
+
+  async function handleResultsCsvFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const content = await file.text();
+    setCsvText(content);
+    setCsvFileName(file.name);
+    setNotice('CSV loaded. Saving results...');
+    setError('');
+    await importResultsCsv();
   }
 
   async function updateResult(result: Result) {
@@ -156,9 +210,23 @@ export default function AdminResultsPage() {
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200"><span className="text-xs text-slate-500">Total records</span><strong className="mt-1 block text-2xl text-[#11222d]">{results.length}</strong></div><div className="rounded-2xl bg-[#fff8e9] p-4 ring-1 ring-[#f0dfb8]"><span className="text-xs text-[#8a6a2f]">Pending approval</span><strong className="mt-1 block text-2xl text-[#8a6a2f]">{pendingCount}</strong></div><div className="rounded-2xl bg-[#eaf5ef] p-4 ring-1 ring-[#cfe6d7]"><span className="text-xs text-[#28704b]">Published</span><strong className="mt-1 block text-2xl text-[#28704b]">{publishedCount}</strong></div></div>
         {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+        {notice && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
       </div>
 
       <div className="rounded-[28px] bg-[#f8fafc] p-4 ring-1 ring-slate-200 sm:p-6">
+        <form onSubmit={importResultsCsv} className="mb-6 rounded-xl bg-white p-4 ring-1 ring-slate-200">
+          <label className="mb-2 block text-sm font-semibold text-slate-700">Upload results CSV</label>
+          <div className="mb-3 flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+            <input type="file" accept=".csv,text/csv" onChange={handleResultsCsvFileChange} className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-[#0d5a4d] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white" />
+            {csvFileName && <span className="text-xs text-slate-500">Selected file: {csvFileName}</span>}
+          </div>
+          <textarea value={csvText} onChange={(event) => setCsvText(event.target.value)} rows={6} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="studentId,studentName,courseCode,score,level,semester,academicYear" />
+          <div className="mt-3 flex justify-end">
+            <button type="submit" disabled={isImportingCsv} className="rounded-lg bg-[#0d5a4d] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+              {isImportingCsv ? 'Saving...' : 'Save results list'}
+            </button>
+          </div>
+        </form>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search student or course" className="input-field flex-1" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="input-field sm:max-w-48"><option value="all">All statuses</option><option value="pending">Pending</option><option value="published">Published</option></select></div>
         <div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-bold text-[#11222d]">Result records</h3><span className="text-sm text-slate-500">{visibleResults.length} shown</span></div>
 
@@ -251,6 +319,7 @@ export default function AdminResultsPage() {
         )}
       </div>
       </div>
+      <NotificationsPanel title="Academic review notifications" />
     </div>
   );
 }

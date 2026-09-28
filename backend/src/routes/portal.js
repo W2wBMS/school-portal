@@ -1,11 +1,15 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { protect, authorize } = require('../middleware/auth');
 const StudentProfile = require('../models/StudentProfile');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Attendance = require('../models/Attendance');
 const FeeLedger = require('../models/FeeLedger');
+const Payment = require('../models/Payment');
 const Result = require('../models/Result');
+const Registration = require('../models/Registration');
+const Notification = require('../models/Notification');
 const { audit } = require('../utils/audit');
 const { calculateAcademicSummary } = require('../utils/academics');
 
@@ -25,6 +29,28 @@ function validScore(score) {
   return Number.isFinite(Number(score)) && Number(score) >= 0 && Number(score) <= 100;
 }
 
+function validDateKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function courseScheduleError(course) {
+  const hasSchedule = Boolean(course.scheduleDay || course.startTime || course.endTime);
+  if (!hasSchedule) return null;
+  if (!course.scheduleDay || !course.startTime || !course.endTime) return 'Provide a day, start time, and end time for the timetable entry';
+  if (course.startTime >= course.endTime) return 'Class end time must be later than start time';
+  return null;
+}
+
+async function resolveLecturerAssignment(lecturerId) {
+  if (lecturerId === null || lecturerId === '') return { lecturerId: null };
+  if (!mongoose.Types.ObjectId.isValid(lecturerId)) return { error: 'Select a valid lecturer account' };
+  const lecturer = await User.findOne({ _id: lecturerId, role: 'lecturer', status: 'active' }).select('_id');
+  if (!lecturer) return { error: 'The selected account is not an active lecturer' };
+  return { lecturerId: lecturer._id };
+}
+
 function calculateScore(components) {
   if (!components || typeof components !== 'object' || Array.isArray(components)) return null;
   let ranges = {};
@@ -42,6 +68,16 @@ async function canEnterResult(user, courseId) {
   return Boolean(course);
 }
 
+async function notifyResultReview(course) {
+  const reviewers = await User.find({ role: { $in: ['academic_officer', 'department_admin', 'system_admin', 'super_admin'] }, status: 'active' }).select('_id');
+  if (!reviewers.length) return;
+  await Notification.insertMany(reviewers.map((reviewer) => ({
+    userId: reviewer._id,
+    title: 'Results awaiting approval',
+    message: `New results for ${course.code} — ${course.title} were submitted and need review.`,
+  })));
+}
+
 function canManageAllAttendance(user) {
   return ['department_admin', 'academic_officer', 'system_admin', 'super_admin'].includes(user.role);
 }
@@ -50,6 +86,64 @@ async function canManageAttendance(user, courseId) {
   if (canManageAllAttendance(user)) return true;
   if (user.role !== 'lecturer') return false;
   return Boolean(await Course.exists({ _id: courseId, lecturerId: user._id }));
+}
+
+function parseCsvLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values.map((value) => value.trim());
+}
+
+function normalizeCsvValue(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+function pickCsvValue(row, keys) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim().length > 0) {
+      return String(value).trim();
+    }
+  }
+  return '';
+}
+
+function parseCsvRows(csv) {
+  const lines = String(csv || '').split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0]).map((header) => normalizeCsvValue(header));
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    return headers.reduce((record, header, index) => {
+      record[header] = cells[index] || '';
+      return record;
+    }, {});
+  }).filter((row) => Object.values(row).some((value) => String(value).trim().length > 0));
 }
 
 router.get('/student-overview', protect, async (req, res) => {
@@ -70,18 +164,121 @@ router.get('/student-overview', protect, async (req, res) => {
 });
 
 router.get('/courses', protect, async (req, res) => {
-  const courses = await Course.find().populate('lecturerId', 'fullName email');
+  const filter = req.user.role === 'lecturer' ? { lecturerId: req.user._id } : {};
+  const courses = await Course.find(filter).populate('lecturerId', 'fullName email');
   return res.json({ courses });
 });
 
+router.get('/courses/:id/roster', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: 'Course not found' });
+  const course = await Course.findById(req.params.id).select('code title semester lecturerId');
+  if (!course) return res.status(404).json({ message: 'Course not found' });
+  if (req.user.role === 'lecturer' && String(course.lecturerId) !== String(req.user._id)) return res.status(403).json({ message: 'You can only view rosters for courses assigned to you' });
+
+  const registrations = await Registration.find({ courseIds: course._id, semester: course.semester, status: 'approved' })
+    .populate('studentId', 'fullName email studentId level department programme status')
+    .sort({ 'studentId.fullName': 1 });
+  const students = registrations.map((registration) => registration.studentId).filter((student) => student && student.status === 'active');
+  const dateKey = typeof req.query.date === 'string' ? req.query.date : new Date().toISOString().slice(0, 10);
+  if (!validDateKey(dateKey)) return res.status(400).json({ message: 'Date must use YYYY-MM-DD format' });
+  const dateStart = new Date(`${dateKey}T00:00:00.000Z`);
+  const dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
+  const records = await Attendance.find({ courseId: course._id, studentId: { $in: students.map((student) => student._id) }, date: { $gte: dateStart, $lt: dateEnd } });
+  const attendanceByStudent = new Map(records.map((record) => [String(record.studentId), record]));
+  const roster = students.map((student) => ({ student, attendance: attendanceByStudent.get(String(student._id)) || null }));
+  return res.json({ course, date: dateKey, roster });
+});
+
+router.post('/courses/import', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+  const csv = String(req.body.csv || '');
+  const rows = parseCsvRows(csv);
+
+  if (!rows.length) {
+    return res.status(400).json({ message: 'A valid CSV with course rows is required.' });
+  }
+
+  let created = 0;
+  let updated = 0;
+
+  for (const row of rows) {
+    const code = pickCsvValue(row, ['code', 'coursecode', 'course_code']);
+    const title = pickCsvValue(row, ['title', 'coursetitle', 'name']);
+    const credits = Number(pickCsvValue(row, ['credits', 'credit_hours', 'credit']));
+    const department = pickCsvValue(row, ['department', 'school', 'faculty']) || 'General';
+    const semester = pickCsvValue(row, ['semester', 'term']) || 'Semester 1';
+    const scheduleDay = pickCsvValue(row, ['scheduleday', 'schedule_day', 'day']);
+    const startTime = pickCsvValue(row, ['starttime', 'start_time']);
+    const endTime = pickCsvValue(row, ['endtime', 'end_time']);
+    const room = pickCsvValue(row, ['room', 'location']);
+
+    if (!code || !title) continue;
+
+    const payload = {
+      code: code.toUpperCase(),
+      title,
+      credits: Number.isFinite(credits) && credits > 0 ? credits : 3,
+      department,
+      semester,
+    };
+    if (scheduleDay || startTime || endTime) Object.assign(payload, { scheduleDay, startTime, endTime, room });
+    const scheduleError = courseScheduleError(payload);
+    if (scheduleError) continue;
+
+    const existingCourse = await Course.findOne({ code: payload.code });
+    if (existingCourse) {
+      await Course.findByIdAndUpdate(existingCourse._id, payload, { runValidators: true });
+      updated += 1;
+    } else {
+      await Course.create(payload);
+      created += 1;
+    }
+  }
+
+  return res.json({ message: `Courses imported successfully. Created ${created}, updated ${updated}.`, created, updated });
+});
+
 router.post('/courses', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
-  const course = await Course.create(req.body);
-  return res.status(201).json({ course });
+  const payload = { ...req.body };
+  const scheduleError = courseScheduleError(payload);
+  if (scheduleError) return res.status(400).json({ message: scheduleError });
+  if (Object.hasOwn(payload, 'lecturerId')) {
+    const assignment = await resolveLecturerAssignment(payload.lecturerId);
+    if (assignment.error) return res.status(400).json({ message: assignment.error });
+    payload.lecturerId = assignment.lecturerId;
+  }
+  const course = await Course.create(payload);
+  await audit({ actorId: req.user._id, action: 'course.created', entity: 'Course', entityId: course._id, after: course.toObject() });
+  const populated = await Course.findById(course._id).populate('lecturerId', 'fullName email');
+  return res.status(201).json({ course: populated });
 });
 
 router.patch('/courses/:id', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
-  const course = await Course.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+  const current = await Course.findById(req.params.id);
+  if (!current) return res.status(404).json({ message: 'Course not found' });
+  const updates = { ...req.body };
+  const scheduleError = courseScheduleError({ ...current.toObject(), ...updates });
+  if (scheduleError) return res.status(400).json({ message: scheduleError });
+  if (Object.hasOwn(updates, 'lecturerId')) {
+    const assignment = await resolveLecturerAssignment(updates.lecturerId);
+    if (assignment.error) return res.status(400).json({ message: assignment.error });
+    updates.lecturerId = assignment.lecturerId;
+  }
+  const course = await Course.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).populate('lecturerId', 'fullName email');
   if (!course) return res.status(404).json({ message: 'Course not found' });
+  if (Object.hasOwn(updates, 'lecturerId')) {
+    await audit({ actorId: req.user._id, action: updates.lecturerId ? 'course.lecturer_assigned' : 'course.lecturer_unassigned', entity: 'Course', entityId: course._id, before: current.toObject(), after: course.toObject() });
+    const previousLecturerId = current.lecturerId ? String(current.lecturerId) : '';
+    const nextLecturerId = course.lecturerId ? String(course.lecturerId._id || course.lecturerId) : '';
+    if (nextLecturerId && nextLecturerId !== previousLecturerId) {
+      await Notification.create({ userId: nextLecturerId, title: 'Course assigned', message: `${course.code} — ${course.title} has been assigned to you.` });
+    }
+    if (previousLecturerId && previousLecturerId !== nextLecturerId) {
+      await Notification.create({ userId: previousLecturerId, title: 'Course assignment updated', message: `Your assignment to ${current.code} — ${current.title} has been removed.` });
+    }
+  }
+  if (!Object.keys(updates).every((key) => key === 'lecturerId')) {
+    await audit({ actorId: req.user._id, action: 'course.updated', entity: 'Course', entityId: course._id, before: current.toObject(), after: course.toObject() });
+  }
   return res.json({ course });
 });
 
@@ -99,12 +296,47 @@ router.get('/attendance', protect, authorize('lecturer', 'department_admin', 'st
   return res.json({ attendance });
 });
 
+router.post('/attendance/session', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+  const { courseId, date, records } = req.body;
+  if (!mongoose.Types.ObjectId.isValid(courseId) || !validDateKey(date) || !Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ message: 'Course, valid date, and attendance records are required' });
+  }
+  if (!(await canManageAttendance(req.user, courseId))) return res.status(403).json({ message: 'You are not authorized to manage this course attendance' });
+  const course = await Course.findById(courseId);
+  if (!course) return res.status(404).json({ message: 'Course not found' });
+  if (records.some((record) => !record || typeof record !== 'object' || !mongoose.Types.ObjectId.isValid(record.studentId) || !['present', 'absent', 'late'].includes(record.status))) {
+    return res.status(400).json({ message: 'Each student must appear once with present, absent, or late status' });
+  }
+  const uniqueIds = records.map((record) => String(record.studentId));
+  if (new Set(uniqueIds).size !== uniqueIds.length) return res.status(400).json({ message: 'Each student can only appear once per attendance session' });
+  const registeredIds = await Registration.find({ courseIds: course._id, semester: course.semester, status: 'approved', studentId: { $in: uniqueIds } }).distinct('studentId');
+  if (registeredIds.length !== uniqueIds.length) return res.status(422).json({ message: 'Attendance can only be recorded for students on the approved course roster' });
+
+  const sessionDate = new Date(`${date}T00:00:00.000Z`);
+  const sessionDateEnd = new Date(sessionDate.getTime() + 24 * 60 * 60 * 1000);
+  const saved = [];
+  for (const record of records) {
+    const present = record.status !== 'absent';
+    const attendance = await Attendance.findOneAndUpdate(
+      { courseId: course._id, studentId: record.studentId, date: { $gte: sessionDate, $lt: sessionDateEnd } },
+      { $set: { status: record.status, date: sessionDate, presentCount: present ? 1 : 0, totalClasses: 1, percentage: present ? 100 : 0 } },
+      { new: true, upsert: true, runValidators: true }
+    );
+    saved.push(attendance);
+  }
+  await audit({ actorId: req.user._id, action: 'attendance.session_recorded', entity: 'Course', entityId: course._id, metadata: { date, recordCount: saved.length } });
+  return res.json({ course, date, attendance: saved });
+});
+
 router.post('/attendance', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
   const percentage = Number(req.body.percentage);
   if (!req.body.studentId || !req.body.courseId || !Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
     return res.status(400).json({ message: 'Student, course, and a percentage from 0 to 100 are required' });
   }
   if (!(await canManageAttendance(req.user, req.body.courseId))) return res.status(403).json({ message: 'You are not authorized to manage this course attendance' });
+  if (req.user.role === 'lecturer' && !(await Registration.exists({ studentId: req.body.studentId, courseIds: req.body.courseId, status: 'approved' }))) {
+    return res.status(422).json({ message: 'Attendance can only be recorded for students on the approved course roster' });
+  }
   const attendance = await Attendance.create({ ...req.body, percentage });
   return res.status(201).json({ attendance });
 });
@@ -113,6 +345,9 @@ router.patch('/attendance/:id', protect, authorize('lecturer', 'department_admin
   const current = await Attendance.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Attendance record not found' });
   if (!(await canManageAttendance(req.user, current.courseId))) return res.status(403).json({ message: 'You are not authorized to manage this course attendance' });
+  if (req.user.role === 'lecturer' && !(await Registration.exists({ studentId: current.studentId, courseIds: current.courseId, status: 'approved' }))) {
+    return res.status(422).json({ message: 'Attendance can only be updated for students on the approved course roster' });
+  }
   if (req.body.percentage !== undefined && (!Number.isFinite(Number(req.body.percentage)) || Number(req.body.percentage) < 0 || Number(req.body.percentage) > 100)) {
     return res.status(400).json({ message: 'Percentage must be from 0 to 100' });
   }
@@ -134,9 +369,118 @@ router.get('/fees', protect, authorize('finance_officer', 'department_admin', 's
 });
 
 router.get('/results', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer', 'student'), async (req, res) => {
-  const filter = req.user.role === 'student' ? { studentId: req.user._id, approved: { $ne: false } } : {};
+  const filter = req.user.role === 'student'
+    ? { studentId: req.user._id, approved: { $ne: false } }
+    : req.user.role === 'lecturer'
+      ? { courseId: { $in: await Course.find({ lecturerId: req.user._id }).distinct('_id') } }
+      : {};
   const results = await Result.find(filter).populate('studentId', 'fullName email').populate('courseId', 'code title credits').sort({ semester: 1, createdAt: 1 });
   return res.json({ results });
+});
+
+router.post('/results/import', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer'), async (req, res) => {
+  const csv = String(req.body.csv || '');
+  const rows = parseCsvRows(csv);
+
+  if (!rows.length) {
+    return res.status(400).json({ message: 'A valid CSV with result rows is required.' });
+  }
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  const notifiedCourses = new Set();
+
+  for (const row of rows) {
+    const studentId = pickCsvValue(row, ['studentid', 'student_id', 'student']);
+    const fullName = pickCsvValue(row, ['fullname', 'studentname', 'name']);
+    const email = pickCsvValue(row, ['email', 'studentemail']);
+    const courseCode = pickCsvValue(row, ['coursecode', 'course_code', 'code', 'course']);
+    const score = Number(pickCsvValue(row, ['score', 'marks', 'total']));
+    const level = pickCsvValue(row, ['level', 'studentlevel']) || '';
+    const semester = pickCsvValue(row, ['semester', 'term']) || 'Semester 1';
+    const academicYear = pickCsvValue(row, ['academicyear', 'academic_year', 'year']) || process.env.CURRENT_ACADEMIC_YEAR || '2025/2026';
+
+    if (!courseCode || !Number.isFinite(score) || (!studentId && !fullName && !email)) {
+      skipped += 1;
+      continue;
+    }
+
+    const course = await Course.findOne({ code: new RegExp(`^${courseCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    if (!course || !(await canEnterResult(req.user, course._id))) {
+      skipped += 1;
+      continue;
+    }
+
+    let student = null;
+    if (studentId) {
+      student = await User.findOne({ studentId: String(studentId).trim() });
+    }
+    if (!student && fullName) {
+      student = await User.findOne({ fullName: new RegExp(`^${fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    }
+    if (!student && email) {
+      student = await User.findOne({ email: String(email).trim().toLowerCase() });
+    }
+    if (!student) {
+      skipped += 1;
+      continue;
+    }
+
+    if (req.user.role === 'lecturer' && !(await Registration.exists({ studentId: student._id, courseIds: course._id, semester: course.semester, status: 'approved' }))) {
+      skipped += 1;
+      continue;
+    }
+
+    const normalizedLevel = level || student.level || '';
+    const resultScore = Math.min(Math.max(score, 0), 100);
+    const payload = {
+      studentId: student._id,
+      courseId: course._id,
+      score: resultScore,
+      grade: gradeForScore(resultScore),
+      semester,
+      level: normalizedLevel,
+      academicYear,
+      approved: req.user.role !== 'lecturer',
+      finalized: req.user.role !== 'lecturer',
+      approvedBy: req.user.role === 'lecturer' ? null : req.user._id,
+      approvedAt: req.user.role === 'lecturer' ? null : new Date(),
+    };
+
+    const existing = await Result.findOne({
+      studentId: student._id,
+      courseId: course._id,
+      semester,
+      level: normalizedLevel,
+      academicYear,
+    });
+
+    if (existing?.finalized && req.user.role === 'lecturer') {
+      skipped += 1;
+      continue;
+    }
+    let savedResult;
+    if (existing) {
+      savedResult = await Result.findByIdAndUpdate(existing._id, payload, { new: true, runValidators: true });
+      updated += 1;
+    } else {
+      savedResult = await Result.create(payload);
+      created += 1;
+    }
+    await audit({ actorId: req.user._id, action: req.user.role === 'lecturer' ? 'result.submitted' : 'result.imported', entity: 'Result', entityId: savedResult._id, before: existing?.toObject(), after: savedResult.toObject() });
+    if (req.user.role === 'lecturer' && !notifiedCourses.has(String(course._id))) {
+      await notifyResultReview(course);
+      notifiedCourses.add(String(course._id));
+    }
+  }
+
+  return res.json({
+    message: `Results imported successfully. Created ${created}, updated ${updated}, skipped ${skipped}.`,
+    created,
+    updated,
+    skipped,
+  });
 });
 
 router.post('/results', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer'), async (req, res) => {
@@ -144,13 +488,23 @@ router.post('/results', protect, authorize('academic_officer', 'department_admin
   const calculatedScore = scoreComponents ? calculateScore(scoreComponents) : Number(score);
   if (!studentId || !courseId || !validScore(calculatedScore)) return res.status(400).json({ message: 'Student, course, and valid score components are required' });
   if (!(await canEnterResult(req.user, courseId))) return res.status(403).json({ message: 'You are not authorized to enter results for this course' });
-  const student = await User.findById(studentId).select('level');
+  const student = await User.findById(studentId).select('level status role');
   if (!student) return res.status(404).json({ message: 'Student not found' });
+  if (student.role !== 'student' || student.status !== 'active') return res.status(422).json({ message: 'Results can only be entered for active student accounts' });
+  const course = await Course.findById(courseId).select('semester code title');
+  if (!course) return res.status(404).json({ message: 'Course not found' });
+  if (req.user.role === 'lecturer' && !(await Registration.exists({ studentId, courseIds: courseId, semester: course.semester, status: 'approved' }))) {
+    return res.status(422).json({ message: 'The student is not on the approved roster for this course' });
+  }
   const resultLevel = level || student.level || '';
   const duplicate = await Result.exists({ studentId, courseId, semester, level: resultLevel, academicYear });
   if (duplicate) return res.status(409).json({ message: 'A result already exists for this student, course, and semester' });
-  const result = await Result.create({ studentId, courseId, score: calculatedScore, scoreComponents: scoreComponents || {}, grade: gradeForScore(calculatedScore), semester, level: resultLevel, academicYear, approved: false });
+  const isLecturer = req.user.role === 'lecturer';
+  const result = await Result.create({ studentId, courseId, score: calculatedScore, scoreComponents: scoreComponents || {}, grade: gradeForScore(calculatedScore), semester, level: resultLevel, academicYear, approved: !isLecturer, finalized: !isLecturer, approvedBy: isLecturer ? null : req.user._id, approvedAt: isLecturer ? null : new Date() });
   await audit({ actorId: req.user._id, action: 'result.submitted', entity: 'Result', entityId: result._id, after: result.toObject() });
+  if (isLecturer) {
+    await notifyResultReview(course);
+  }
   const populated = await Result.findById(result._id)
     .populate('studentId', 'fullName email')
     .populate('courseId', 'code title credits');
@@ -176,8 +530,16 @@ router.patch('/results/:id', protect, authorize('academic_officer', 'department_
 router.post('/results/:id/approve', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
   const current = await Result.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Result record not found' });
+  if (current.finalized) return res.status(409).json({ message: 'This result has already been finalized' });
   const result = await Result.findByIdAndUpdate(req.params.id, { approved: true, finalized: true, approvedBy: req.user._id, approvedAt: new Date() }, { new: true });
   await audit({ actorId: req.user._id, action: 'result.approved_and_finalized', entity: 'Result', entityId: result._id, before: current.toObject(), after: result.toObject() });
+  const course = await Course.findById(result.courseId).select('code title lecturerId');
+  const recipients = [result.studentId, course?.lecturerId].filter(Boolean).map(String);
+  await Notification.insertMany([...new Set(recipients)].map((userId) => ({
+    userId,
+    title: 'Result approved',
+    message: `${course?.code || 'A course'} result for ${result.semester} has been approved and published.`,
+  })));
   return res.json({ result });
 });
 
@@ -207,14 +569,15 @@ router.post('/fees', protect, authorize('finance_officer', 'department_admin', '
   }
   const balance = amountDue - amountPaid;
   const fee = await FeeLedger.create({ ...req.body, amountDue, amountPaid, balance, status: balance === 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid' });
+  await audit({ actorId: req.user._id, action: 'fee.created', entity: 'FeeLedger', entityId: fee._id, after: fee.toObject() });
   return res.status(201).json({ fee });
 });
 
 router.patch('/fees/:id', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+  const current = await FeeLedger.findById(req.params.id);
+  if (!current) return res.status(404).json({ message: 'Fee record not found' });
   const updates = { ...req.body };
   if (updates.amountDue !== undefined || updates.amountPaid !== undefined) {
-    const current = await FeeLedger.findById(req.params.id);
-    if (!current) return res.status(404).json({ message: 'Fee record not found' });
     const amountDue = Number(updates.amountDue ?? current.amountDue);
     const amountPaid = Number(updates.amountPaid ?? current.amountPaid);
     if (!Number.isFinite(amountDue) || amountDue < 0 || !Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > amountDue) {
@@ -227,12 +590,16 @@ router.patch('/fees/:id', protect, authorize('finance_officer', 'department_admi
   }
   const fee = await FeeLedger.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
   if (!fee) return res.status(404).json({ message: 'Fee record not found' });
+  await audit({ actorId: req.user._id, action: 'fee.updated', entity: 'FeeLedger', entityId: fee._id, before: current.toObject(), after: fee.toObject() });
   return res.json({ fee });
 });
 
 router.delete('/fees/:id', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
-  const fee = await FeeLedger.findByIdAndDelete(req.params.id);
+  const fee = await FeeLedger.findById(req.params.id);
   if (!fee) return res.status(404).json({ message: 'Fee record not found' });
+  if (await Payment.exists({ feeLedgerId: fee._id, status: 'successful' })) return res.status(409).json({ message: 'Invoices with verified payments cannot be deleted' });
+  await FeeLedger.deleteOne({ _id: fee._id });
+  await audit({ actorId: req.user._id, action: 'fee.deleted', entity: 'FeeLedger', entityId: fee._id, before: fee.toObject() });
   return res.json({ message: 'Fee record deleted' });
 });
 

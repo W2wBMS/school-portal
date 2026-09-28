@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bunso Cocoa College Portal",
-  description: "The academic workspace for Bunso Cocoa College students and staff",
+  title: "Regent University College of Science and Technology Portal",
+  description: "The academic workspace for Regent University College of Science and Technology students and staff",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

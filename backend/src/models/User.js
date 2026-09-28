@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const DEFAULT_STUDENT_ID_PREFIX = '1029';
+
 const userSchema = new mongoose.Schema(
   {
     fullName: {
@@ -23,6 +25,8 @@ const userSchema = new mongoose.Schema(
     studentId: {
       type: String,
       default: '',
+      unique: true,
+      trim: true,
     },
     role: {
       type: String,
@@ -85,11 +89,35 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+userSchema.statics.generateStudentId = async function generateStudentId() {
+  const prefix = DEFAULT_STUDENT_ID_PREFIX;
+  const lastUser = await this.findOne({
+    studentId: { $regex: new RegExp(`^${prefix}\\d{4}$`) },
+  })
+    .sort({ studentId: -1 })
+    .select('studentId');
+
+  let sequence = 1;
+  if (lastUser?.studentId) {
+    const numericPart = Number(lastUser.studentId.slice(prefix.length));
+    if (Number.isInteger(numericPart)) {
+      sequence = numericPart + 1;
+    }
+  }
+
+  return `${prefix}${String(sequence).padStart(4, '0')}`;
+};
+
 userSchema.pre('save', async function hashPassword() {
   if (!this.isModified('password')) return;
 
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+});
+
+userSchema.pre('save', async function ensureStudentId() {
+  if (this.studentId && this.studentId.trim()) return;
+  this.studentId = await this.constructor.generateStudentId();
 });
 
 userSchema.methods.comparePassword = async function comparePassword(candidatePassword) {

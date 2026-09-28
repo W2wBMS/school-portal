@@ -86,7 +86,7 @@ export default function RegisterPage() {
               value={form.email}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
               className="input-field"
-              placeholder="name@bunsococoa.edu.gh"
+              placeholder="name@rucst.edu.gh"
               required
             />
           </div>
@@ -103,15 +103,8 @@ export default function RegisterPage() {
             />
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#334155]">Student ID</label>
-            <input
-              type="text"
-              value={form.studentId}
-              onChange={(event) => setForm({ ...form, studentId: event.target.value })}
-              className="input-field"
-              placeholder="BCC/AG/2024/042"
-            />
+          <div className="md:col-span-2 rounded-2xl border border-[#dfe8e3] bg-[#f4f8f6] px-4 py-3 text-sm text-[#1a3d35]">
+            Student index number will be generated automatically in the format 1029XXXX.
           </div>
 
           <div>

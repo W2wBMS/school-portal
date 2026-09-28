@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
@@ -15,8 +17,90 @@ const router = express.Router();
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: 'Too many login attempts. Try again later.' } });
 const MAX_LOGIN_FAILURES = 5;
 const LOCKOUT_MINUTES = 15;
-const registerSchema = z.object({ fullName: z.string().trim().min(2).max(120), email: z.string().trim().email(), password: z.string().min(8).max(128), studentId: z.string().trim().max(40).optional(), department: z.string().trim().max(120).optional(), programme: z.string().trim().max(160).optional(), level: z.string().trim().max(40).optional() });
-const loginSchema = z.object({ email: z.string().trim().email(), password: z.string().min(1).max(128) });
+const registerSchema = z.object({ fullName: z.string().trim().min(2).max(120), email: z.string().trim().email(), password: z.string().min(8).max(128), studentId: z.string().trim().regex(/^1029\d{4}$/).optional().or(z.literal('')), department: z.string().trim().max(120).optional(), programme: z.string().trim().max(160).optional(), level: z.string().trim().max(40).optional() });
+const loginSchema = z.object({ studentId: z.string().trim().regex(/^1029\d{4}$/).optional().or(z.literal('')), email: z.string().trim().email().optional().or(z.literal('')), password: z.string().min(1).max(128) }).refine((data) => data.studentId || data.email, { message: 'A valid student ID or email is required', path: ['studentId'] });
+
+function normalizeCsvValue(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+function normalizeLevelValue(value) {
+  const normalized = normalizeCsvValue(value);
+  if (!normalized) return '';
+
+  const match = normalized.match(/(?:level\s*)?(\d+)/i);
+  if (match) return match[1];
+
+  return normalized;
+}
+
+function parseCsvLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values.map((value) => value.trim());
+}
+
+function loadAdmissionRecords() {
+  const csvPath = path.resolve(__dirname, '../../data/admissions.csv');
+  if (!fs.existsSync(csvPath)) {
+    return [];
+  }
+
+  const csv = fs.readFileSync(csvPath, 'utf8');
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0]).map((header) => header.trim().toLowerCase());
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    return headers.reduce((record, header, index) => {
+      record[header] = cells[index] || '';
+      return record;
+    }, {});
+  });
+}
+
+function findAdmissionRecord(fullName, programme = '', department = '', level = '') {
+  const normalizedFullName = normalizeCsvValue(fullName);
+  const normalizedProgramme = normalizeCsvValue(programme);
+  const normalizedDepartment = normalizeCsvValue(department);
+  const normalizedLevel = normalizeLevelValue(level);
+
+  return loadAdmissionRecords().find((record) => {
+    const recordName = normalizeCsvValue(record.fullname || record.name || record.student_name || record.studentname || '');
+    if (recordName !== normalizedFullName) return false;
+
+    if (normalizedProgramme && normalizeCsvValue(record.programme || record.program || record.degree || '') !== normalizedProgramme) return false;
+    if (normalizedDepartment && normalizeCsvValue(record.department || '') !== normalizedDepartment) return false;
+    if (normalizedLevel && normalizeLevelValue(record.level || '') !== normalizedLevel) return false;
+
+    return true;
+  });
+}
 
 function createToken(user) {
   return jwt.sign({ id: user._id, role: user.role, sessionVersion: user.sessionVersion || 0 }, getJwtSecret(), {
@@ -41,7 +125,7 @@ router.post('/register', async (req, res) => {
       email: String(email).toLowerCase(),
       password,
       role: 'student',
-      studentId: studentId || '',
+      studentId: studentId || undefined,
       department: department || '',
       programme: programme || '',
       level: level || '',
@@ -49,7 +133,7 @@ router.post('/register', async (req, res) => {
 
     await StudentProfile.create({
       userId: user._id,
-      studentId: studentId || `STU-${user._id.toString().slice(-8).toUpperCase()}`,
+      studentId: user.studentId,
       fullName: user.fullName,
       email: user.email,
       programme: programme || undefined,
@@ -79,15 +163,84 @@ router.post('/register', async (req, res) => {
   }
 });
 
+router.post('/claim-account', async (req, res) => {
+  try {
+    const schema = z.object({
+      fullName: z.string().trim().min(2).max(120),
+      password: z.string().min(8).max(128),
+      programme: z.string().trim().max(160).optional().or(z.literal('')),
+      department: z.string().trim().max(120).optional().or(z.literal('')),
+      level: z.string().trim().max(40).optional().or(z.literal('')),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Please enter a valid full name and a password with at least 8 characters.' });
+    }
+
+    const { fullName, password, programme, department, level } = parsed.data;
+    const admissionRecord = findAdmissionRecord(fullName, programme, department, level);
+
+    if (!admissionRecord) {
+      return res.status(404).json({ message: 'No admitted student matches that name in the current admission list.' });
+    }
+
+    const existingUser = await User.findOne({ fullName: new RegExp(`^${fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+    if (existingUser) {
+      return res.status(409).json({ message: 'An account already exists for this student. Please sign in with your student ID.' });
+    }
+
+    const studentId = await User.generateStudentId();
+    const email = (admissionRecord.email || `${studentId.toLowerCase()}@rucst.edu.gh`).trim().toLowerCase();
+
+    const user = await User.create({
+      fullName,
+      email,
+      password,
+      role: 'student',
+      studentId,
+      department: department || admissionRecord.department || '',
+      programme: programme || admissionRecord.programme || '',
+      level: level || admissionRecord.level || '',
+      status: 'active',
+    });
+
+    await StudentProfile.create({
+      userId: user._id,
+      studentId: user.studentId,
+      fullName: user.fullName,
+      email: user.email,
+      programme: user.programme,
+      department: user.department,
+      level: user.level,
+      cgpa: 0,
+      creditsCompleted: 0,
+      feeBalance: 0,
+      hallResidence: '',
+      status: 'registered',
+    });
+
+    return res.status(201).json({
+      message: 'Student account created successfully.',
+      studentId: user.studentId,
+      user: user.toPublicJSON(),
+    });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return res.status(503).json({ message: 'Student verification service is temporarily unavailable. Please try again.' });
+    console.error(`Claim account failed: ${error.name}`);
+    return res.status(500).json({ message: 'Unable to create the student account. Please try again.' });
+  }
+});
+
 router.post('/login', loginLimiter, async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: 'A valid email and password are required' });
-    const { email, password } = parsed.data;
+    if (!parsed.success) return res.status(400).json({ message: 'A valid student ID or email and password are required.' });
+    const { studentId, email, password } = parsed.data;
 
-    const user = await User.findOne({ email: String(email).toLowerCase() });
+    const user = await User.findOne(studentId ? { studentId } : { email: String(email).toLowerCase() });
     if (!user || user.status !== 'active') {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid student ID or password' });
     }
 
     if (user.lockUntil && user.lockUntil > new Date()) return res.status(423).json({ message: 'Account temporarily locked. Try again later.' });
@@ -101,7 +254,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       }
       await user.save();
       await audit({ actorId: user._id, action: 'auth.login_failed', entity: 'User', entityId: user._id, metadata: { reason: 'invalid_password' } });
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid student ID or password' });
     }
 
     user.failedLoginAttempts = 0;
@@ -141,3 +294,4 @@ router.get('/me', protect, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.findAdmissionRecord = findAdmissionRecord;

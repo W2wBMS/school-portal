@@ -101,6 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { label: 'Results', href: '/dashboard/student/results', icon: GraduationCap },
       { label: 'Transcript', href: '/dashboard/student/transcript', icon: FileText },
       { label: 'Attendance', href: '/dashboard/student/attendance', icon: CalendarCheck2 },
+      { label: 'Timetable', href: '/dashboard/student/timetable', icon: CalendarDays },
       { label: 'Fees', href: '/dashboard/student/fees', icon: CircleDollarSign },
       { label: 'Payments', href: '/dashboard/student/payments', icon: CircleDollarSign },
       { label: 'Registration', href: '/dashboard/student/registration', icon: FileText },
@@ -111,12 +112,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { label: 'Overview', href: '/dashboard/lecturer', icon: LayoutDashboard },
       { label: 'Courses', href: '/dashboard/lecturer/courses', icon: BookOpen },
       { label: 'Attendance', href: '/dashboard/lecturer/attendance', icon: CalendarCheck2 },
+      { label: 'Results', href: '/dashboard/lecturer/results', icon: GraduationCap },
+      { label: 'Timetable', href: '/dashboard/lecturer/timetable', icon: CalendarDays },
     ],
     admin: [
       { label: 'Overview', href: '/dashboard/admin', icon: LayoutDashboard },
       { label: 'Courses', href: '/dashboard/admin/courses', icon: BookOpen },
       { label: 'Attendance', href: '/dashboard/admin/attendance', icon: CalendarCheck2 },
+      { label: 'Timetable', href: '/dashboard/admin/timetable', icon: CalendarDays },
       { label: 'Fees', href: '/dashboard/admin/fees', icon: CircleDollarSign },
+      { label: 'Payments', href: '/dashboard/admin/payments', icon: CircleDollarSign },
       { label: 'Results', href: '/dashboard/admin/results', icon: GraduationCap },
       { label: 'Users', href: '/dashboard/admin/users', icon: Users },
       { label: 'Requests', href: '/dashboard/admin/requests', icon: Bell },
@@ -144,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#d6b46a] text-[#123d35] shadow-lg shadow-black/10"><ShieldCheck size={23} /></div>
             <div>
               <p className="text-[11px] uppercase tracking-[0.22em] text-[#dfece7]">Student Portal</p>
-              <h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">Bunso Cocoa College</h1>
+              <h1 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">Regent University College of Science and Technology</h1>
             </div>
           </div>
 
@@ -167,7 +172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="grid gap-0 lg:grid-cols-[64px_220px_minmax(0,1fr)] xl:grid-cols-[64px_220px_minmax(0,1fr)_248px]">
           <aside className="dashboard-rail hidden flex-col items-center gap-3 px-2 py-5 lg:flex">
-            <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#d5b675] text-[#083f39]" title="Bunso Cocoa College"><ShieldCheck size={19} /></div>
+            <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#d5b675] text-[#083f39]" title="Regent University College of Science and Technology"><ShieldCheck size={19} /></div>
             <nav className="flex flex-col items-center gap-2" aria-label="Quick navigation">
               {railItems.map((item) => (
                 <Link key={item.label} href={item.href} aria-label={item.label} title={item.label} className={`flex h-10 w-10 items-center justify-center rounded-xl ${pathname === item.href ? 'rail-active' : ''}`}>

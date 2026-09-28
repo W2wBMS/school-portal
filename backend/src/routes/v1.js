@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const StudentProfile = require('../models/StudentProfile');
@@ -123,6 +124,21 @@ router.get('/students/me/transcript', protect, authorize('student'), async (req,
   return res.json({ student: req.user, results: normalizedResults, academicSummary: calculateAcademicSummary(normalizedResults) });
 });
 
+router.get('/timetable', protect, authorize('student', 'lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+  let courses;
+  if (req.user.role === 'lecturer') {
+    courses = await Course.find({ lecturerId: req.user._id, isActive: { $ne: false } }).populate('lecturerId', 'fullName');
+  } else if (req.user.role === 'student') {
+    const registration = await Registration.findOne({ studentId: req.user._id, semester: currentSemester(), status: 'approved' });
+    courses = registration
+      ? await Course.find({ _id: { $in: registration.courseIds }, isActive: { $ne: false } }).populate('lecturerId', 'fullName')
+      : [];
+  } else {
+    courses = await Course.find({ isActive: { $ne: false } }).populate('lecturerId', 'fullName');
+  }
+  return res.json({ semester: currentSemester(), courses });
+});
+
 router.get('/registrations/current', protect, authorize('student'), async (req, res) => {
   const registration = await Registration.findOne({ studentId: req.user._id, semester: currentSemester() }).populate('courseIds');
   return res.json({ registration });
@@ -194,13 +210,96 @@ router.get('/fees', protect, authorize('student'), async (req, res) => {
   return res.json({ fees });
 });
 
+router.get('/payments', protect, authorize('student'), async (req, res) => {
+  const payments = await Payment.find({ studentId: req.user._id }).populate('feeLedgerId', 'invoiceNumber semester').sort({ createdAt: -1 });
+  return res.json({ payments });
+});
+
+router.get('/payments/review', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+  const payments = await Payment.find().populate('studentId', 'fullName email studentId').populate('feeLedgerId', 'invoiceNumber semester amountDue amountPaid balance').sort({ createdAt: -1 });
+  return res.json({ payments });
+});
+
 router.post('/payments/initialize', protect, authorize('student'), async (req, res) => {
   const amount = Number(req.body.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: 'A positive payment amount is required' });
+  const { feeLedgerId, idempotencyKey, studentReference, paymentMethod } = req.body;
+  if (!mongoose.Types.ObjectId.isValid(feeLedgerId) || !Number.isFinite(amount) || amount <= 0 || typeof idempotencyKey !== 'string' || !idempotencyKey.trim() || idempotencyKey.length > 128 || typeof studentReference !== 'string' || !studentReference.trim() || studentReference.length > 100 || !['bank_transfer', 'mobile_money', 'cash'].includes(paymentMethod)) {
+    return res.status(400).json({ message: 'A valid invoice, amount, payment method, transaction reference, and request key are required' });
+  }
+  const requestKey = idempotencyKey.trim();
+  const existing = await Payment.findOne({ studentId: req.user._id, idempotencyKey: requestKey });
+  if (existing) return res.json({ payment: existing, reference: existing.reference, reused: true });
+  const fee = await FeeLedger.findOne({ _id: feeLedgerId, studentId: req.user._id });
+  if (!fee) return res.status(404).json({ message: 'Fee invoice not found' });
+  if (fee.balance <= 0) return res.status(409).json({ message: 'This invoice has no outstanding balance' });
+  if (amount > fee.balance) return res.status(400).json({ message: 'Payment amount cannot exceed this invoice balance' });
   const reference = `BCC-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-  const payment = await Payment.create({ studentId: req.user._id, reference, amount, purpose: req.body.purpose || 'fees', gateway: req.body.gateway || 'manual' });
+  let payment;
+  try {
+    payment = await Payment.create({ studentId: req.user._id, feeLedgerId: fee._id, idempotencyKey: requestKey, studentReference: studentReference.trim(), paymentMethod, reference, amount, purpose: 'fees', gateway: 'manual' });
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    payment = await Payment.findOne({ studentId: req.user._id, idempotencyKey: requestKey });
+    if (!payment && error.keyPattern?.studentReference) return res.status(409).json({ message: 'This transaction or receipt reference has already been submitted' });
+    if (!payment) throw error;
+    return res.json({ payment, reference: payment.reference, reused: true });
+  }
   await audit({ actorId: req.user._id, action: 'payment.initialized', entity: 'Payment', entityId: payment._id, after: payment.toObject() });
   return res.status(201).json({ payment, reference });
+});
+
+router.post('/payments/:reference/verify', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+  const decision = req.body.decision;
+  const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
+  if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ message: 'Choose approve or reject' });
+  if (note.length > 500) return res.status(400).json({ message: 'The staff note cannot exceed 500 characters' });
+  if (decision === 'reject' && !note) return res.status(400).json({ message: 'A reason is required when rejecting a payment' });
+
+  const current = await Payment.findOne({ reference: req.params.reference });
+  if (!current) return res.status(404).json({ message: 'Payment not found' });
+  if (current.status !== 'pending') return res.status(409).json({ message: 'Only pending payments can be reviewed' });
+
+  const status = decision === 'approve' ? 'successful' : 'failed';
+  if (decision === 'approve') {
+    const fee = current.feeLedgerId
+      ? await FeeLedger.findOne({ _id: current.feeLedgerId, studentId: current.studentId, balance: { $gte: current.amount } })
+      : null;
+    if (!fee) return res.status(409).json({ message: 'The linked invoice no longer has enough balance for this payment' });
+    const feeBefore = fee.toObject();
+
+    const payment = await Payment.findOneAndUpdate(
+      { _id: current._id, status: 'pending' },
+      { status, creditedAt: new Date(), verifiedBy: req.user._id, verificationNote: note },
+      { new: true }
+    );
+    if (!payment) return res.status(409).json({ message: 'Payment was already reviewed' });
+
+    const updatedFee = await FeeLedger.findOneAndUpdate(
+      { _id: fee._id, studentId: current.studentId, balance: { $gte: current.amount } },
+      { $inc: { amountPaid: current.amount, balance: -current.amount } },
+      { new: true }
+    );
+    if (!updatedFee) {
+      await Payment.findOneAndUpdate({ _id: payment._id, status, creditedAt: payment.creditedAt }, { status: 'pending', $unset: { creditedAt: 1, verifiedBy: 1, verificationNote: 1 } });
+      return res.status(409).json({ message: 'Invoice balance changed while reviewing; refresh and try again' });
+    }
+    updatedFee.status = updatedFee.balance === 0 ? 'paid' : 'partial';
+    await updatedFee.save();
+    await Notification.create({ userId: payment.studentId, title: 'Payment verified', message: `Payment ${payment.reference} for GH¢ ${payment.amount.toFixed(2)} has been verified and applied to invoice ${updatedFee.invoiceNumber}.` });
+    await audit({ actorId: req.user._id, action: 'payment.verified', entity: 'Payment', entityId: payment._id, before: current.toObject(), after: payment.toObject(), metadata: { feeLedgerId: updatedFee._id } });
+    await audit({ actorId: req.user._id, action: 'fee.payment_credited', entity: 'FeeLedger', entityId: updatedFee._id, before: feeBefore, after: updatedFee.toObject(), metadata: { paymentId: payment._id } });
+    return res.json({ payment, fee: updatedFee });
+  }
+
+  const payment = await Payment.findOneAndUpdate(
+    { _id: current._id, status: 'pending' },
+    { status, verifiedBy: req.user._id, verificationNote: note },
+    { new: true }
+  );
+  if (!payment) return res.status(409).json({ message: 'Payment was already reviewed' });
+  await Notification.create({ userId: payment.studentId, title: 'Payment not approved', message: `Payment ${payment.reference} was not approved: ${note}` });
+  await audit({ actorId: req.user._id, action: 'payment.rejected', entity: 'Payment', entityId: payment._id, before: current.toObject(), after: payment.toObject() });
+  return res.json({ payment });
 });
 
 router.get('/payments/:reference', protect, authorize('student'), async (req, res) => {
@@ -213,16 +312,20 @@ router.post('/payments/:reference/refund', protect, authorize('finance_officer',
   const current = await Payment.findOne({ reference: req.params.reference });
   if (!current) return res.status(404).json({ message: 'Payment not found' });
   if (current.status !== 'successful' || !current.creditedAt) return res.status(409).json({ message: 'Only credited successful payments can be refunded' });
+  const fee = current.feeLedgerId
+    ? await FeeLedger.findOne({ _id: current.feeLedgerId, studentId: current.studentId, amountPaid: { $gte: current.amount } })
+    : await FeeLedger.findOne({ studentId: current.studentId, amountPaid: { $gte: current.amount } }).sort({ createdAt: -1 });
+  if (!fee) return res.status(409).json({ message: 'The linked invoice cannot be adjusted for this refund' });
+  const feeBefore = fee.toObject();
   const payment = await Payment.findOneAndUpdate({ _id: current._id, status: 'successful' }, { status: 'refunded' }, { new: true });
   if (!payment) return res.status(409).json({ message: 'Payment has already changed state' });
-  const fee = await FeeLedger.findOne({ studentId: payment.studentId }).sort({ createdAt: -1 });
-  if (fee) {
-    fee.amountPaid = Math.max(Number(fee.amountPaid) - payment.amount, 0);
-    fee.balance = Math.max(Number(fee.amountDue) - fee.amountPaid, 0);
-    fee.status = fee.balance === 0 ? 'paid' : fee.amountPaid > 0 ? 'partial' : 'unpaid';
-    await fee.save();
-  }
+  fee.amountPaid = Math.max(Number(fee.amountPaid) - payment.amount, 0);
+  fee.balance = Math.min(Number(fee.amountDue), Number(fee.balance) + payment.amount);
+  fee.status = fee.balance === 0 ? 'paid' : fee.amountPaid > 0 ? 'partial' : 'unpaid';
+  await fee.save();
+  await Notification.create({ userId: payment.studentId, title: 'Payment refunded', message: `Payment ${payment.reference} was refunded and GH¢ ${payment.amount.toFixed(2)} was returned to invoice ${fee.invoiceNumber}.` });
   await audit({ actorId: req.user._id, action: 'payment.refunded', entity: 'Payment', entityId: payment._id, before: current.toObject(), after: payment.toObject() });
+  await audit({ actorId: req.user._id, action: 'fee.payment_refunded', entity: 'FeeLedger', entityId: fee._id, before: feeBefore, after: fee.toObject(), metadata: { paymentId: payment._id } });
   return res.json({ payment });
 });
 
@@ -240,6 +343,7 @@ router.post('/payments/webhook', async (req, res) => {
   if (!reference || !['successful', 'failed', 'pending'].includes(status)) return res.status(400).json({ message: 'Reference and valid status are required' });
   const current = await Payment.findOne({ reference });
   if (!current) return res.status(404).json({ message: 'Payment not found' });
+  if (current.gateway === 'manual') return res.status(409).json({ message: 'Manual payments must be verified by finance staff' });
   if (current.status === status) return res.json({ received: true, alreadyProcessed: true, payment: current });
   if (current.status !== 'pending') return res.status(409).json({ message: 'Payment state cannot transition from its current status' });
   const payment = await Payment.findOneAndUpdate(
@@ -287,9 +391,19 @@ router.patch('/requests/:id', protect, authorize('student_affairs', 'department_
   return res.json({ request });
 });
 
-router.get('/notifications', protect, authorize('student'), async (req, res) => {
+router.get('/notifications', protect, async (req, res) => {
   const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 });
   return res.json({ notifications });
+});
+
+router.patch('/notifications/:id/read', protect, async (req, res) => {
+  const notification = await Notification.findOneAndUpdate(
+    { _id: req.params.id, userId: req.user._id, readAt: null },
+    { readAt: new Date() },
+    { new: true }
+  );
+  if (!notification) return res.status(404).json({ message: 'Unread notification not found' });
+  return res.json({ notification });
 });
 
 module.exports = router;

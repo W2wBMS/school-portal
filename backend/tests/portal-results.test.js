@@ -27,6 +27,61 @@ test('portal router exposes protected finance, attendance, and student service w
   assert(paths.includes('patch /fees/:id'));
 });
 
+test('payment routes expose invoice-linked manual review and student notifications', () => {
+  const router = require('../src/routes/v1');
+  const paths = router.stack
+    .filter((layer) => layer.route)
+    .map((layer) => Object.keys(layer.route.methods)[0] + ' ' + layer.route.path);
+  const Payment = require('../src/models/Payment');
+
+  assert(paths.includes('get /payments/review'));
+  assert(paths.includes('post /payments/initialize'));
+  assert(paths.includes('post /payments/:reference/verify'));
+  assert(paths.includes('patch /notifications/:id/read'));
+  assert.equal(Payment.schema.path('feeLedgerId').options.ref, 'FeeLedger');
+  assert.equal(Payment.schema.path('reference').options.unique, true);
+  assert.ok(Payment.schema.path('idempotencyKey'));
+  assert.ok(Payment.schema.path('studentReference'));
+});
+
+test('user router exposes a separate lecturer CSV import route', () => {
+  const router = require('../src/routes/users');
+  const paths = router.stack
+    .filter((layer) => layer.route)
+    .map((layer) => Object.keys(layer.route.methods)[0] + ' ' + layer.route.path);
+
+  assert(paths.includes('post /lecturers/import'));
+  assert(paths.includes('post /admissions/import'));
+});
+
+test('courses can store and update an assigned lecturer', () => {
+  const Course = require('../src/models/Course');
+  const paths = require('../src/routes/portal').stack
+    .filter((layer) => layer.route)
+    .map((layer) => Object.keys(layer.route.methods)[0] + ' ' + layer.route.path);
+
+  assert.equal(Course.schema.path('lecturerId').options.ref, 'User');
+  assert(paths.includes('patch /courses/:id'));
+});
+
+test('assigned course workflows expose rosters, attendance sessions, and timetable fields', () => {
+  const portalPaths = require('../src/routes/portal').stack
+    .filter((layer) => layer.route)
+    .map((layer) => Object.keys(layer.route.methods)[0] + ' ' + layer.route.path);
+  const v1Paths = require('../src/routes/v1').stack
+    .filter((layer) => layer.route)
+    .map((layer) => Object.keys(layer.route.methods)[0] + ' ' + layer.route.path);
+  const Course = require('../src/models/Course');
+
+  assert(portalPaths.includes('get /courses/:id/roster'));
+  assert(portalPaths.includes('post /attendance/session'));
+  assert(v1Paths.includes('get /timetable'));
+  assert.ok(Course.schema.path('scheduleDay'));
+  assert.ok(Course.schema.path('startTime'));
+  assert.ok(Course.schema.path('endTime'));
+  assert.ok(Course.schema.path('room'));
+});
+
 test('result model keeps the academic identity fields explicit', () => {
   const Result = require('../src/models/Result');
   assert.equal(Result.schema.path('studentId').options.required, true);

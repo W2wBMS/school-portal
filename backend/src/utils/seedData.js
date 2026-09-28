@@ -29,7 +29,7 @@ async function seedPortalData() {
       if (!profile) {
         await StudentProfile.create({
           userId: student._id,
-          studentId: 'BCC/AG/2024/042',
+          studentId: student.studentId || '10290001',
           fullName: student.fullName,
           email: student.email,
           programme: 'Diploma in Agronomy & Cocoa Extension',
