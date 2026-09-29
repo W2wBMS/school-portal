@@ -1,14 +1,29 @@
+const fs = require('fs');
+const path = require('path');
 const StudentProfile = require('../models/StudentProfile');
 const Course = require('../models/Course');
 const Attendance = require('../models/Attendance');
 const FeeLedger = require('../models/FeeLedger');
 const Result = require('../models/Result');
 const User = require('../models/User');
+const AdmissionList = require('../models/AdmissionList');
+const { parseAdmissionsCsv } = require('./admissions');
 
 async function seedPortalData() {
   if (process.env.NODE_ENV === 'production') {
     console.log('Demo portal data is disabled in production');
     return;
+  }
+
+  const admissionsPath = path.resolve(__dirname, '../../data/admissions.csv');
+  if (fs.existsSync(admissionsPath) && !(await AdmissionList.exists({ key: 'active' }))) {
+    try {
+      const records = parseAdmissionsCsv(fs.readFileSync(admissionsPath, 'utf8'));
+      await AdmissionList.create({ key: 'active', records });
+      console.log(`Loaded ${records.length} local admissions records into MongoDB`);
+    } catch (error) {
+      console.error(`Local admissions list was not loaded (${error.name})`);
+    }
   }
 
   const courseCount = await Course.countDocuments();

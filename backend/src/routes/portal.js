@@ -61,15 +61,24 @@ function calculateScore(components) {
   return total <= 100 ? total : null;
 }
 
+function createBlankResultApprovals() {
+  return { hod: null, lecturer: null, admin: null };
+}
+
+function resultHasRequiredApprovals(result) {
+  const approvals = result?.resultApprovals || createBlankResultApprovals();
+  return Boolean(approvals.hod && approvals.lecturer && approvals.admin);
+}
+
 async function canEnterResult(user, courseId) {
-  if (['academic_officer', 'department_admin', 'system_admin', 'super_admin'].includes(user.role)) return true;
+  if (['academic_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'].includes(user.role)) return true;
   if (user.role !== 'lecturer') return false;
   const course = await Course.findOne({ _id: courseId, lecturerId: user._id });
   return Boolean(course);
 }
 
 async function notifyResultReview(course) {
-  const reviewers = await User.find({ role: { $in: ['academic_officer', 'department_admin', 'system_admin', 'super_admin'] }, status: 'active' }).select('_id');
+  const reviewers = await User.find({ role: { $in: ['academic_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'] }, status: 'active' }).select('_id');
   if (!reviewers.length) return;
   await Notification.insertMany(reviewers.map((reviewer) => ({
     userId: reviewer._id,
@@ -79,7 +88,7 @@ async function notifyResultReview(course) {
 }
 
 function canManageAllAttendance(user) {
-  return ['department_admin', 'academic_officer', 'system_admin', 'super_admin'].includes(user.role);
+  return ['department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'].includes(user.role);
 }
 
 async function canManageAttendance(user, courseId) {
@@ -288,7 +297,7 @@ router.delete('/courses/:id', protect, authorize('academic_officer', 'department
   return res.json({ message: 'Course deleted' });
 });
 
-router.get('/attendance', protect, authorize('lecturer', 'department_admin', 'student_affairs', 'system_admin', 'super_admin', 'academic_officer'), async (req, res) => {
+router.get('/attendance', protect, authorize('lecturer', 'department_admin', 'student_affairs', 'system_admin', 'super_admin', 'academic_officer', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const filter = req.user.role === 'lecturer'
     ? { courseId: { $in: await Course.find({ lecturerId: req.user._id }).distinct('_id') } }
     : {};
@@ -296,7 +305,7 @@ router.get('/attendance', protect, authorize('lecturer', 'department_admin', 'st
   return res.json({ attendance });
 });
 
-router.post('/attendance/session', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/attendance/session', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const { courseId, date, records } = req.body;
   if (!mongoose.Types.ObjectId.isValid(courseId) || !validDateKey(date) || !Array.isArray(records) || records.length === 0) {
     return res.status(400).json({ message: 'Course, valid date, and attendance records are required' });
@@ -328,7 +337,7 @@ router.post('/attendance/session', protect, authorize('lecturer', 'department_ad
   return res.json({ course, date, attendance: saved });
 });
 
-router.post('/attendance', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/attendance', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const percentage = Number(req.body.percentage);
   if (!req.body.studentId || !req.body.courseId || !Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
     return res.status(400).json({ message: 'Student, course, and a percentage from 0 to 100 are required' });
@@ -341,7 +350,7 @@ router.post('/attendance', protect, authorize('lecturer', 'department_admin', 'a
   return res.status(201).json({ attendance });
 });
 
-router.patch('/attendance/:id', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.patch('/attendance/:id', protect, authorize('lecturer', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const current = await Attendance.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Attendance record not found' });
   if (!(await canManageAttendance(req.user, current.courseId))) return res.status(403).json({ message: 'You are not authorized to manage this course attendance' });
@@ -356,29 +365,35 @@ router.patch('/attendance/:id', protect, authorize('lecturer', 'department_admin
   return res.json({ attendance });
 });
 
-router.delete('/attendance/:id', protect, authorize('department_admin', 'student_affairs', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.delete('/attendance/:id', protect, authorize('department_admin', 'student_affairs', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const attendance = await Attendance.findByIdAndDelete(req.params.id);
   if (!attendance) return res.status(404).json({ message: 'Attendance record not found' });
   return res.json({ message: 'Attendance record deleted' });
 });
 
-router.get('/fees', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin', 'student'), async (req, res) => {
+router.get('/fees', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin', 'student', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const filter = req.user.role === 'student' ? { studentId: req.user._id } : {};
   const fees = await FeeLedger.find(filter).populate('studentId', 'fullName email');
   return res.json({ fees });
 });
 
-router.get('/results', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer', 'student'), async (req, res) => {
+router.get('/results', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer', 'student', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const filter = req.user.role === 'student'
     ? { studentId: req.user._id, approved: { $ne: false } }
     : req.user.role === 'lecturer'
       ? { courseId: { $in: await Course.find({ lecturerId: req.user._id }).distinct('_id') } }
       : {};
-  const results = await Result.find(filter).populate('studentId', 'fullName email').populate('courseId', 'code title credits').sort({ semester: 1, createdAt: 1 });
+  const results = await Result.find(filter)
+    .populate('studentId', 'fullName email')
+    .populate('courseId', 'code title credits')
+    .populate('resultApprovals.hod', 'fullName role')
+    .populate('resultApprovals.lecturer', 'fullName role')
+    .populate('resultApprovals.admin', 'fullName role')
+    .sort({ semester: 1, createdAt: 1 });
   return res.json({ results });
 });
 
-router.post('/results/import', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer'), async (req, res) => {
+router.post('/results/import', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const csv = String(req.body.csv || '');
   const rows = parseCsvRows(csv);
 
@@ -442,10 +457,11 @@ router.post('/results/import', protect, authorize('academic_officer', 'departmen
       semester,
       level: normalizedLevel,
       academicYear,
-      approved: req.user.role !== 'lecturer',
-      finalized: req.user.role !== 'lecturer',
-      approvedBy: req.user.role === 'lecturer' ? null : req.user._id,
-      approvedAt: req.user.role === 'lecturer' ? null : new Date(),
+      approved: false,
+      finalized: false,
+      approvedBy: null,
+      approvedAt: null,
+      resultApprovals: createBlankResultApprovals(),
     };
 
     const existing = await Result.findOne({
@@ -483,7 +499,7 @@ router.post('/results/import', protect, authorize('academic_officer', 'departmen
   });
 });
 
-router.post('/results', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer'), async (req, res) => {
+router.post('/results', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const { studentId, courseId, score, scoreComponents, semester = 'Semester 1', level, academicYear = process.env.CURRENT_ACADEMIC_YEAR || '2025/2026' } = req.body;
   const calculatedScore = scoreComponents ? calculateScore(scoreComponents) : Number(score);
   if (!studentId || !courseId || !validScore(calculatedScore)) return res.status(400).json({ message: 'Student, course, and valid score components are required' });
@@ -500,7 +516,7 @@ router.post('/results', protect, authorize('academic_officer', 'department_admin
   const duplicate = await Result.exists({ studentId, courseId, semester, level: resultLevel, academicYear });
   if (duplicate) return res.status(409).json({ message: 'A result already exists for this student, course, and semester' });
   const isLecturer = req.user.role === 'lecturer';
-  const result = await Result.create({ studentId, courseId, score: calculatedScore, scoreComponents: scoreComponents || {}, grade: gradeForScore(calculatedScore), semester, level: resultLevel, academicYear, approved: !isLecturer, finalized: !isLecturer, approvedBy: isLecturer ? null : req.user._id, approvedAt: isLecturer ? null : new Date() });
+  const result = await Result.create({ studentId, courseId, score: calculatedScore, scoreComponents: scoreComponents || {}, grade: gradeForScore(calculatedScore), semester, level: resultLevel, academicYear, approved: false, finalized: false, approvedBy: null, approvedAt: null, resultApprovals: createBlankResultApprovals() });
   await audit({ actorId: req.user._id, action: 'result.submitted', entity: 'Result', entityId: result._id, after: result.toObject() });
   if (isLecturer) {
     await notifyResultReview(course);
@@ -511,14 +527,14 @@ router.post('/results', protect, authorize('academic_officer', 'department_admin
   return res.status(201).json({ result: populated });
 });
 
-router.patch('/results/:id', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer'), async (req, res) => {
+router.patch('/results/:id', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'lecturer', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const current = await Result.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Result record not found' });
   if (current.finalized) return res.status(409).json({ message: 'Finalized grades require the correction workflow' });
   if (!(await canEnterResult(req.user, current.courseId))) return res.status(403).json({ message: 'You are not authorized to update this result' });
   const calculatedScore = req.body.scoreComponents ? calculateScore(req.body.scoreComponents) : Number(req.body.score);
   if (!validScore(calculatedScore)) return res.status(400).json({ message: 'Score or score components must be within configured ranges' });
-  const result = await Result.findByIdAndUpdate(req.params.id, { score: calculatedScore, scoreComponents: req.body.scoreComponents || current.scoreComponents, grade: gradeForScore(calculatedScore) }, { new: true, runValidators: true });
+  const result = await Result.findByIdAndUpdate(req.params.id, { score: calculatedScore, scoreComponents: req.body.scoreComponents || current.scoreComponents, grade: gradeForScore(calculatedScore), approved: false, finalized: false, resultApprovals: createBlankResultApprovals(), approvedBy: null, approvedAt: null }, { new: true, runValidators: true });
   if (!result) return res.status(404).json({ message: 'Result record not found' });
   await audit({ actorId: req.user._id, action: 'result.updated', entity: 'Result', entityId: result._id, before: current.toObject(), after: result.toObject() });
   const populated = await Result.findById(result._id)
@@ -527,33 +543,83 @@ router.patch('/results/:id', protect, authorize('academic_officer', 'department_
   return res.json({ result: populated });
 });
 
-router.post('/results/:id/approve', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/results/:id/approve', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc', 'lecturer'), async (req, res) => {
   const current = await Result.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Result record not found' });
   if (current.finalized) return res.status(409).json({ message: 'This result has already been finalized' });
-  const result = await Result.findByIdAndUpdate(req.params.id, { approved: true, finalized: true, approvedBy: req.user._id, approvedAt: new Date() }, { new: true });
-  await audit({ actorId: req.user._id, action: 'result.approved_and_finalized', entity: 'Result', entityId: result._id, before: current.toObject(), after: result.toObject() });
-  const course = await Course.findById(result.courseId).select('code title lecturerId');
-  const recipients = [result.studentId, course?.lecturerId].filter(Boolean).map(String);
-  await Notification.insertMany([...new Set(recipients)].map((userId) => ({
-    userId,
-    title: 'Result approved',
-    message: `${course?.code || 'A course'} result for ${result.semester} has been approved and published.`,
-  })));
-  return res.json({ result });
+
+  const course = await Course.findById(current.courseId).select('code title lecturerId');
+  const approvalType = String(req.body.approvalType || '').toLowerCase();
+  const isCourseLecturer = String(course?.lecturerId || '') === String(req.user._id);
+  const isHodApprover = ['hod', 'pro_vc', 'vc'].includes(req.user.role);
+  const isAdminApprover = ['department_admin', 'academic_officer', 'finance_officer', 'student_affairs', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'].includes(req.user.role);
+
+  let requestedType = approvalType;
+  if (!requestedType) {
+    if (isCourseLecturer) requestedType = 'lecturer';
+    else if (isHodApprover) requestedType = 'hod';
+    else if (isAdminApprover) requestedType = 'admin';
+  }
+
+  if (!['hod', 'lecturer', 'admin'].includes(requestedType)) {
+    return res.status(400).json({ message: 'Specify an approval type of hod, lecturer, or admin.' });
+  }
+  if (requestedType === 'lecturer' && !isCourseLecturer) {
+    return res.status(403).json({ message: 'Only the assigned lecturer can confirm the lecturer approval step.' });
+  }
+  if (requestedType === 'hod' && !isHodApprover) {
+    return res.status(403).json({ message: 'Only the HOD or higher can confirm the HOD approval step.' });
+  }
+  if (requestedType === 'admin' && !isAdminApprover) {
+    return res.status(403).json({ message: 'Only an administrator can confirm the admin approval step.' });
+  }
+
+  const approvals = current.resultApprovals || createBlankResultApprovals();
+  approvals[requestedType] = req.user._id;
+  const complete = resultHasRequiredApprovals({ resultApprovals: approvals });
+  const result = await Result.findByIdAndUpdate(req.params.id, {
+    resultApprovals: approvals,
+    approved: complete,
+    finalized: complete,
+    approvedBy: req.user._id,
+    approvedAt: new Date(),
+  }, { new: true });
+
+  await audit({ actorId: req.user._id, action: 'result.approved', entity: 'Result', entityId: result._id, before: current.toObject(), after: result.toObject(), metadata: { approvalType: requestedType, complete } });
+
+  if (complete) {
+    const recipients = [result.studentId, course?.lecturerId].filter(Boolean).map(String);
+    await Notification.insertMany([...new Set(recipients)].map((userId) => ({
+      userId,
+      title: 'Result approved',
+      message: `${course?.code || 'A course'} result for ${result.semester} has been approved and published.`,
+    })));
+  }
+
+  const populated = await Result.findById(result._id)
+    .populate('studentId', 'fullName email')
+    .populate('courseId', 'code title credits')
+    .populate('resultApprovals.hod', 'fullName role')
+    .populate('resultApprovals.lecturer', 'fullName role')
+    .populate('resultApprovals.admin', 'fullName role');
+  return res.json({ result: populated, complete });
 });
 
-router.post('/results/:id/correct', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/results/:id/correct', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc', 'lecturer'), async (req, res) => {
   const current = await Result.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Result record not found' });
   if (!current.finalized) return res.status(409).json({ message: 'Use the normal result update workflow before finalization' });
-  if (!req.body.reason || !validScore(req.body.score)) return res.status(400).json({ message: 'Correction reason and score from 0 to 100 are required' });
-  const result = await Result.findByIdAndUpdate(req.params.id, { score: Number(req.body.score), grade: gradeForScore(Number(req.body.score)), approved: false, finalized: false, correctionReason: req.body.reason, approvedBy: null, approvedAt: null }, { new: true, runValidators: true });
+  if (!(await canEnterResult(req.user, current.courseId))) return res.status(403).json({ message: 'You are not authorized to correct this result' });
+  if (!String(req.body.reason || '').trim() || !validScore(req.body.score)) return res.status(400).json({ message: 'Correction reason and score from 0 to 100 are required' });
+  const result = await Result.findByIdAndUpdate(req.params.id, { score: Number(req.body.score), grade: gradeForScore(Number(req.body.score)), approved: false, finalized: false, correctionReason: req.body.reason, approvedBy: null, approvedAt: null, resultApprovals: createBlankResultApprovals() }, { new: true, runValidators: true });
   await audit({ actorId: req.user._id, action: 'result.corrected', entity: 'Result', entityId: result._id, before: current.toObject(), after: result.toObject(), metadata: { reason: req.body.reason } });
-  return res.json({ result });
+  const populated = await Result.findById(result._id)
+    .populate('studentId', 'fullName email')
+    .populate('courseId', 'code title credits');
+  return res.json({ result: populated });
 });
 
-router.delete('/results/:id', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+router.delete('/results/:id', protect, authorize('academic_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const existing = await Result.findById(req.params.id);
   if (existing?.finalized) return res.status(409).json({ message: 'Finalized grades require the correction workflow' });
   const result = await Result.findByIdAndDelete(req.params.id);
@@ -561,7 +627,7 @@ router.delete('/results/:id', protect, authorize('academic_officer', 'department
   return res.json({ message: 'Result deleted' });
 });
 
-router.post('/fees', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/fees', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const amountDue = Number(req.body.amountDue);
   const amountPaid = Number(req.body.amountPaid || 0);
   if (!req.body.studentId || !req.body.invoiceNumber || !Number.isFinite(amountDue) || amountDue < 0 || !Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > amountDue) {
@@ -573,7 +639,7 @@ router.post('/fees', protect, authorize('finance_officer', 'department_admin', '
   return res.status(201).json({ fee });
 });
 
-router.patch('/fees/:id', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+router.patch('/fees/:id', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const current = await FeeLedger.findById(req.params.id);
   if (!current) return res.status(404).json({ message: 'Fee record not found' });
   const updates = { ...req.body };
@@ -594,7 +660,7 @@ router.patch('/fees/:id', protect, authorize('finance_officer', 'department_admi
   return res.json({ fee });
 });
 
-router.delete('/fees/:id', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin'), async (req, res) => {
+router.delete('/fees/:id', protect, authorize('finance_officer', 'department_admin', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const fee = await FeeLedger.findById(req.params.id);
   if (!fee) return res.status(404).json({ message: 'Fee record not found' });
   if (await Payment.exists({ feeLedgerId: fee._id, status: 'successful' })) return res.status(409).json({ message: 'Invoices with verified payments cannot be deleted' });

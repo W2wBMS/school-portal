@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import NotificationsPanel from '@/components/NotificationsPanel';
+import ResultApprovalStatus from '@/components/ResultApprovalStatus';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 type Student = { _id: string; fullName: string; email: string };
 type Course = { _id: string; code: string; title: string; credits: number };
-type Result = { _id: string; score: number; grade: string; semester: string; level?: string; academicYear?: string; approved: boolean; finalized: boolean; studentId?: Student; courseId?: Course };
+type ApprovalType = 'hod' | 'lecturer' | 'admin';
+type ApprovalActor = string | { _id: string; fullName?: string; role?: string } | null;
+type Result = { _id: string; score: number; grade: string; semester: string; level?: string; academicYear?: string; approved: boolean; finalized: boolean; resultApprovals?: { hod?: ApprovalActor; lecturer?: ApprovalActor; admin?: ApprovalActor }; studentId?: Student; courseId?: Course };
 
 export default function AdminResultsPage() {
   const [results, setResults] = useState<Result[]>([]);
@@ -21,12 +24,20 @@ export default function AdminResultsPage() {
   const [csvText, setCsvText] = useState('studentId,studentName,courseCode,score,level,semester,academicYear\n10290001,Daniel Owusu,AGR101,88,100,Semester 1,2025/2026');
   const [csvFileName, setCsvFileName] = useState('');
   const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [editingResultId, setEditingResultId] = useState<string | null>(null);
+  const [editingScore, setEditingScore] = useState('');
+  const [editingReason, setEditingReason] = useState('');
+  const [currentApprovalType, setCurrentApprovalType] = useState<ApprovalType | ''>('');
+  const [approvingResultId, setApprovingResultId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       try {
         const token = localStorage.getItem('portal_token') || '';
         const headers = { Authorization: `Bearer ${token}` };
+        const savedUser = JSON.parse(localStorage.getItem('portal_user') || 'null') as { role?: string } | null;
+        const role = savedUser?.role || '';
+        setCurrentApprovalType(['hod', 'pro_vc', 'vc'].includes(role) ? 'hod' : role ? 'admin' : '');
 
         const [resultsResponse, usersResponse, coursesResponse] = await Promise.all([
           fetch(`${API_BASE}/portal/results`, { credentials: 'include', headers }),
@@ -130,52 +141,72 @@ export default function AdminResultsPage() {
     await importResultsCsv();
   }
 
-  async function updateResult(result: Result) {
-    const score = window.prompt('Enter the new score', String(result.score ?? 0));
-    if (score === null) return;
+  function startEditResult(result: Result) {
+    setEditingResultId(result._id);
+    setEditingScore(String(result.score ?? 0));
+    setEditingReason('');
+    setError('');
+    setNotice('');
+  }
 
-    const response = await fetch(`${API_BASE}/portal/results/${result._id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}`,
-      },
-      body: JSON.stringify({ score: Number(score) }),
-    });
+  function cancelEditResult() {
+    setEditingResultId(null);
+    setEditingScore('');
+    setEditingReason('');
+  }
 
-    if (response.ok) {
+  async function saveEditResult(result: Result) {
+    try {
+      const nextScore = Number(editingScore);
+      if (!Number.isFinite(nextScore) || nextScore < 0 || nextScore > 100) {
+        throw new Error('Score must be between 0 and 100.');
+      }
+      if (result.finalized && !editingReason.trim()) {
+        throw new Error('Enter a reason for correcting this finalized result.');
+      }
+
+      const response = await fetch(`${API_BASE}/portal/results/${result._id}${result.finalized ? '/correct' : ''}`, {
+        method: result.finalized ? 'POST' : 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}`,
+        },
+        body: JSON.stringify(result.finalized ? { score: nextScore, reason: editingReason.trim() } : { score: nextScore }),
+      });
+
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Unable to update this result.');
+      }
+
       setResults((current) => current.map((item) => item._id === result._id ? data.result : item));
+      cancelEditResult();
+      setNotice('Result updated and re-submitted for approval.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update this result.');
     }
   }
 
   async function approveResult(result: Result) {
-    const response = await fetch(`${API_BASE}/portal/results/${result._id}/approve`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` },
-    });
-
-    if (response.ok) {
+    setApprovingResultId(result._id);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`${API_BASE}/portal/results/${result._id}/approve`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` },
+        body: JSON.stringify(currentApprovalType ? { approvalType: currentApprovalType } : {}),
+      });
       const data = await response.json();
-      setResults((current) => current.map((item) => item._id === result._id ? { ...item, ...data.result, approved: true, finalized: true } : item));
-    }
-  }
-
-  async function correctResult(result: Result) {
-    const score = window.prompt('Enter the corrected score', String(result.score ?? 0));
-    const reason = score === null ? null : window.prompt('Enter the correction reason');
-    if (score === null || !reason) return;
-    const response = await fetch(`${API_BASE}/portal/results/${result._id}/correct`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` },
-      body: JSON.stringify({ score: Number(score), reason }),
-    });
-    if (response.ok) {
-      const data = await response.json();
-      setResults((current) => current.map((item) => item._id === result._id ? { ...item, ...data.result } : item));
+      if (!response.ok) throw new Error(data.message || 'Unable to approve this result.');
+      setResults((current) => current.map((item) => item._id === result._id ? data.result : item));
+      setNotice(data.complete ? 'All approvals are complete. The result is published.' : 'Your approval was recorded. The result is waiting for the remaining approvals.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to approve this result.');
+    } finally {
+      setApprovingResultId(null);
     }
   }
 
@@ -302,16 +333,26 @@ export default function AdminResultsPage() {
                   {row.courseId?.title || 'Course title'} • Level {row.level || '—'} • {row.academicYear || '—'} • {row.semester}
                 </div>
                   <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.approved ? 'bg-[#eaf5ef] text-[#28704b]' : 'bg-[#fff8e9] text-[#8a6a2f]'}`}>{row.approved ? 'Published' : 'Pending approval'}</span>
+                  <ResultApprovalStatus approvals={row.resultApprovals} />
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:gap-4">
                 <div>
                   <div className="text-lg font-bold text-[#0d5a4d]">{row.grade}</div>
                   <div className="text-sm text-slate-500">{row.score}%</div>
                 </div>
-                {!row.approved && (
-                  <button onClick={() => approveResult(row)} className="w-full rounded-lg bg-[#0d5a4d] px-3 py-2 text-sm font-medium text-white sm:w-auto">Approve</button>
+                {!row.approved && (!currentApprovalType || !row.resultApprovals?.[currentApprovalType]) && (
+                  <button disabled={approvingResultId === row._id} onClick={() => approveResult(row)} className="w-full rounded-lg bg-[#0d5a4d] px-3 py-2 text-sm font-medium text-white disabled:opacity-60 sm:w-auto">{approvingResultId === row._id ? 'Approving...' : 'Approve'}</button>
                 )}
-                {row.finalized ? <button onClick={() => correctResult(row)} className="w-full rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 sm:w-auto">Correct</button> : <button onClick={() => updateResult(row)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium sm:w-auto">Edit</button>}
+                {editingResultId === row._id ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input aria-label={`Edit score for ${row.studentId?.fullName || 'student'}`} type="number" min="0" max="100" step="0.01" value={editingScore} onChange={(event) => setEditingScore(event.target.value)} className="w-24 rounded-lg border border-slate-200 px-2 py-2 text-sm" />
+                    {row.finalized && <input aria-label="Correction reason" value={editingReason} onChange={(event) => setEditingReason(event.target.value)} placeholder="Correction reason" className="w-40 rounded-lg border border-slate-200 px-2 py-2 text-sm" />}
+                    <button type="button" onClick={() => saveEditResult(row)} className="rounded-lg bg-[#0d5a4d] px-3 py-2 text-sm font-medium text-white">Save</button>
+                    <button type="button" onClick={cancelEditResult} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">Cancel</button>
+                  </div>
+                ) : (
+                  <button onClick={() => startEditResult(row)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium sm:w-auto">Edit</button>
+                )}
                 <button onClick={() => deleteResult(row._id)} className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 sm:w-auto">Delete</button>
               </div>
             </div>

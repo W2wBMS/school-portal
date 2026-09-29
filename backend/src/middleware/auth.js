@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { permissionsForRole, hasPermission } = require('../utils/permissions');
+const { permissionsForRole, hasPermission, isRoleAtLeast } = require('../utils/permissions');
 const { getJwtSecret } = require('../utils/jwtSecret');
 const { isDatabaseUnavailable } = require('../utils/databaseStatus');
 
@@ -46,7 +46,8 @@ function authorize(...roles) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const hasAccess = roles.some((role) => isRoleAtLeast(req.user.role, role));
+    if (!hasAccess) {
       return res.status(403).json({ message: 'You do not have permission to access this resource' });
     }
 

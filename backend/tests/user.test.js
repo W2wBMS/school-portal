@@ -4,7 +4,9 @@ const mongoose = require('mongoose');
 
 const User = require('../src/models/User');
 const StudentProfile = require('../src/models/StudentProfile');
+const AdmissionList = require('../src/models/AdmissionList');
 const authRouter = require('../src/routes/auth');
+const { parseAdmissionsCsv } = require('../src/utils/admissions');
 
 test('User password hashes during save without a next callback', async () => {
   await mongoose.connect('mongodb://127.0.0.1:27017/student-portal-test');
@@ -86,8 +88,17 @@ test('New student profiles default to zero CGPA and credits completed', async ()
   await mongoose.disconnect();
 });
 
-test('Admissions lookup accepts a numeric level when the CSV stores Level 100', () => {
-  const record = authRouter.findAdmissionRecord('Daniel Owusu', 'Cocoa Production Systems', 'Agronomy', '100');
+test('Admissions lookup accepts a numeric level when the imported record stores Level 100', async () => {
+  await mongoose.connect('mongodb://127.0.0.1:27017/student-portal-test');
+  await mongoose.connection.db.dropDatabase().catch(() => {});
+
+  const records = parseAdmissionsCsv('fullName,programme,department,level,email\nTest Student,Computer Science,Computing,Level 100,test.student@example.com');
+  await AdmissionList.create({ key: 'active', records });
+
+  const record = await authRouter.findAdmissionRecord('Test Student', 'Computer Science', 'Computing', '100');
   assert.ok(record);
-  assert.equal(record.fullName || record.fullname, 'Daniel Owusu');
+  assert.equal(record.fullName, 'Test Student');
+
+  await AdmissionList.deleteMany({});
+  await mongoose.disconnect();
 });

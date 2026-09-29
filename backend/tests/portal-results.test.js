@@ -107,3 +107,15 @@ test('role permission metadata follows resource.action naming', () => {
   assert(permissions.includes('results.approve'));
   assert(permissions.every((permission) => permission.includes('.') || permission === '*'));
 });
+
+test('senior academic roles are registered and result changes require multi-party approval', () => {
+  const User = require('../src/models/User');
+  const Result = require('../src/models/Result');
+
+  assert(User.schema.path('role').enumValues.includes('hod'));
+  assert(User.schema.path('role').enumValues.includes('pro_vc'));
+  assert(User.schema.path('role').enumValues.includes('vc'));
+  assert.ok(Result.schema.path('resultApprovals.hod'));
+  assert.ok(Result.schema.path('resultApprovals.lecturer'));
+  assert.ok(Result.schema.path('resultApprovals.admin'));
+});

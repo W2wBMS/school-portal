@@ -1,16 +1,16 @@
-const fs = require('fs');
-const path = require('path');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const StudentProfile = require('../models/StudentProfile');
+const AdmissionList = require('../models/AdmissionList');
 const { protect } = require('../middleware/auth');
 const { setCsrfCookie } = require('../middleware/csrf');
 const { audit } = require('../utils/audit');
 const { permissionsForRole } = require('../utils/permissions');
 const { getJwtSecret } = require('../utils/jwtSecret');
 const { isDatabaseUnavailable } = require('../utils/databaseStatus');
+const { normalizeAdmissionValue, normalizeAdmissionLevel } = require('../utils/admissions');
 const { z } = require('zod');
 
 const router = express.Router();
@@ -20,86 +20,18 @@ const LOCKOUT_MINUTES = 15;
 const registerSchema = z.object({ fullName: z.string().trim().min(2).max(120), email: z.string().trim().email(), password: z.string().min(8).max(128), studentId: z.string().trim().regex(/^1029\d{4}$/).optional().or(z.literal('')), department: z.string().trim().max(120).optional(), programme: z.string().trim().max(160).optional(), level: z.string().trim().max(40).optional() });
 const loginSchema = z.object({ studentId: z.string().trim().regex(/^1029\d{4}$/).optional().or(z.literal('')), email: z.string().trim().email().optional().or(z.literal('')), password: z.string().min(1).max(128) }).refine((data) => data.studentId || data.email, { message: 'A valid student ID or email is required', path: ['studentId'] });
 
-function normalizeCsvValue(value) {
-  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ');
-}
-
-function normalizeLevelValue(value) {
-  const normalized = normalizeCsvValue(value);
-  if (!normalized) return '';
-
-  const match = normalized.match(/(?:level\s*)?(\d+)/i);
-  if (match) return match[1];
-
-  return normalized;
-}
-
-function parseCsvLine(line) {
-  const values = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === '"') {
-      if (inQuotes && line[index + 1] === '"') {
-        current += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      values.push(current);
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  values.push(current);
-  return values.map((value) => value.trim());
-}
-
-function loadAdmissionRecords() {
-  const csvPath = path.resolve(__dirname, '../../data/admissions.csv');
-  if (!fs.existsSync(csvPath)) {
-    return [];
-  }
-
-  const csv = fs.readFileSync(csvPath, 'utf8');
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) return [];
-
-  const headers = parseCsvLine(lines[0]).map((header) => header.trim().toLowerCase());
-  return lines.slice(1).map((line) => {
-    const cells = parseCsvLine(line);
-    return headers.reduce((record, header, index) => {
-      record[header] = cells[index] || '';
-      return record;
-    }, {});
-  });
-}
-
-function findAdmissionRecord(fullName, programme = '', department = '', level = '') {
-  const normalizedFullName = normalizeCsvValue(fullName);
-  const normalizedProgramme = normalizeCsvValue(programme);
-  const normalizedDepartment = normalizeCsvValue(department);
-  const normalizedLevel = normalizeLevelValue(level);
-
-  return loadAdmissionRecords().find((record) => {
-    const recordName = normalizeCsvValue(record.fullname || record.name || record.student_name || record.studentname || '');
-    if (recordName !== normalizedFullName) return false;
-
-    if (normalizedProgramme && normalizeCsvValue(record.programme || record.program || record.degree || '') !== normalizedProgramme) return false;
-    if (normalizedDepartment && normalizeCsvValue(record.department || '') !== normalizedDepartment) return false;
-    if (normalizedLevel && normalizeLevelValue(record.level || '') !== normalizedLevel) return false;
-
-    return true;
-  });
+async function findAdmissionRecord(fullName, programme = '', department = '', level = '') {
+  const normalizedFullName = normalizeAdmissionValue(fullName);
+  const normalizedProgramme = normalizeAdmissionValue(programme);
+  const normalizedDepartment = normalizeAdmissionValue(department);
+  const normalizedLevel = normalizeAdmissionLevel(level);
+  const admissionList = await AdmissionList.findOne({ key: 'active' }).lean();
+  return admissionList?.records.find((record) => (
+    record.normalizedFullName === normalizedFullName
+    && (!normalizedProgramme || record.normalizedProgramme === normalizedProgramme)
+    && (!normalizedDepartment || record.normalizedDepartment === normalizedDepartment)
+    && (!normalizedLevel || record.normalizedLevel === normalizedLevel)
+  )) || null;
 }
 
 function createToken(user) {
@@ -179,7 +111,7 @@ router.post('/claim-account', async (req, res) => {
     }
 
     const { fullName, password, programme, department, level } = parsed.data;
-    const admissionRecord = findAdmissionRecord(fullName, programme, department, level);
+    const admissionRecord = await findAdmissionRecord(fullName, programme, department, level);
 
     if (!admissionRecord) {
       return res.status(404).json({ message: 'No admitted student matches that name in the current admission list.' });

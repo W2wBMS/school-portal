@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getDashboardPath, type Role } from '@/lib/auth';
 import { fetchCsrfToken } from '@/lib/csrf';
+import PasswordInput from '@/components/PasswordInput';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -139,12 +140,12 @@ export default function LoginPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-black">Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={loginForm.password}
-                onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                onChange={(password) => setLoginForm({ ...loginForm, password })}
                 className="input-field"
                 placeholder="Enter your password"
+                autoComplete="current-password"
                 required
               />
             </div>
@@ -207,13 +208,13 @@ export default function LoginPage() {
                 placeholder="Level"
               />
 
-              <input
-                type="password"
+              <PasswordInput
                 value={claimForm.password}
-                onChange={(event) => setClaimForm({ ...claimForm, password: event.target.value })}
+                onChange={(password) => setClaimForm({ ...claimForm, password })}
                 className="input-field"
                 placeholder="Create password"
                 minLength={8}
+                autoComplete="new-password"
                 required
               />
 

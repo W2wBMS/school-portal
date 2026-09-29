@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useEffect } from 'react';
 import { fetchCsrfToken } from '@/lib/csrf';
+import PasswordInput from '@/components/PasswordInput';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -22,5 +23,5 @@ export default function ResetPasswordPage() {
     if (!response.ok) setError(data.message || 'Unable to reset password');
     else setMessage(data.message);
   }
-  return <main className="flex min-h-screen items-center justify-center px-4"><div className="login-frame w-full max-w-md rounded-[28px] p-8 sm:p-10"><p className="muted-kicker">Account recovery</p><h1 className="mt-3 text-3xl font-bold text-black">Choose a new password</h1><form onSubmit={submit} className="mt-7 space-y-5"><label className="block text-sm font-semibold text-black">New password<input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="input-field mt-2" /></label><button className="primary-button w-full rounded-lg px-4 py-3 font-semibold text-black">Update password</button></form>{message && <p className="mt-4 rounded-xl bg-[#e5f1ed] p-3 text-sm text-black">{message}</p>}{error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-black">{error}</p>}<Link href="/login" className="mt-6 block text-center text-sm font-semibold text-black underline-offset-4 hover:underline">Back to login</Link></div></main>;
+  return <main className="flex min-h-screen items-center justify-center px-4"><div className="login-frame w-full max-w-md rounded-[28px] p-8 sm:p-10"><p className="muted-kicker">Account recovery</p><h1 className="mt-3 text-3xl font-bold text-black">Choose a new password</h1><form onSubmit={submit} className="mt-7 space-y-5"><label className="block text-sm font-semibold text-black">New password<PasswordInput required minLength={8} value={password} onChange={setPassword} className="input-field mt-2" autoComplete="new-password" /></label><button className="primary-button w-full rounded-lg px-4 py-3 font-semibold text-black">Update password</button></form>{message && <p className="mt-4 rounded-xl bg-[#e5f1ed] p-3 text-sm text-black">{message}</p>}{error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-black">{error}</p>}<Link href="/login" className="mt-6 block text-center text-sm font-semibold text-black underline-offset-4 hover:underline">Back to login</Link></div></main>;
 }

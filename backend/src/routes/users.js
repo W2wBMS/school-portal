@@ -1,12 +1,12 @@
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const User = require('../models/User');
 const StudentProfile = require('../models/StudentProfile');
+const AdmissionList = require('../models/AdmissionList');
 const { protect, authorize } = require('../middleware/auth');
 const { audit } = require('../utils/audit');
 const { sendPasswordResetEmail } = require('../utils/mail');
+const { parseAdmissionsCsv } = require('../utils/admissions');
 const { z } = require('zod');
 
 const router = express.Router();
@@ -45,54 +45,19 @@ function normalizeCsvRow(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
 
-function saveAdmissionCsv(csv) {
-  const filePath = path.resolve(__dirname, '../../data/admissions.csv');
-  const directory = path.dirname(filePath);
-  if (!fs.existsSync(directory)) {
-    fs.mkdirSync(directory, { recursive: true });
-  }
-
-  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length < 2) {
-    throw new Error('The CSV must include a header row and at least one student row.');
-  }
-
-  const header = parseCsvLine(lines[0]);
-  const normalizedHeader = header.map((item) => item.trim().toLowerCase());
-  const required = ['fullname', 'name', 'student_name', 'studentname'];
-  if (!normalizedHeader.some((item) => required.includes(item)) && !normalizedHeader.includes('fullname')) {
-    throw new Error('The CSV must include a full name column such as fullName or full_name.');
-  }
-
-  const cleaned = [header.join(',')];
-  for (const line of lines.slice(1)) {
-    const cells = parseCsvLine(line);
-    if (cells.length < header.length) {
-      while (cells.length < header.length) cells.push('');
-    }
-    cleaned.push(cells.slice(0, header.length).map((cell) => {
-      const text = normalizeCsvRow(cell).replace(/"/g, '""');
-      return `"${text}"`;
-    }).join(','));
-  }
-
-  fs.writeFileSync(filePath, `${cleaned.join('\n')}\n`, 'utf8');
-  return filePath;
-}
-
 router.get('/me', protect, async (req, res) => {
   return res.json({ user: req.user });
 });
 
-router.get('/', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.get('/', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const users = await User.find().select('-password').sort({ createdAt: -1 });
   return res.json({ users });
 });
 
-router.post('/', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const allowedRoles = ['student', 'lecturer'];
   const requestedRole = req.body.role || 'student';
-  if (!allowedRoles.includes(requestedRole) && !['system_admin', 'super_admin'].includes(req.user.role)) {
+  if (!allowedRoles.includes(requestedRole) && !['system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'].includes(req.user.role)) {
     return res.status(403).json({ message: 'Only system administrators can create privileged users' });
   }
   const user = await User.create({ ...req.body, role: requestedRole });
@@ -110,7 +75,7 @@ router.post('/', protect, authorize('student_affairs', 'department_admin', 'acad
   return res.status(201).json({ user: user.toPublicJSON() });
 });
 
-router.post('/admissions/import', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/admissions/import', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const importSchema = z.object({ csv: z.string().min(10) });
   const parsed = importSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -118,17 +83,22 @@ router.post('/admissions/import', protect, authorize('student_affairs', 'departm
   }
 
   try {
-    const filePath = saveAdmissionCsv(parsed.data.csv);
+    const records = parseAdmissionsCsv(parsed.data.csv);
+    await AdmissionList.findOneAndUpdate(
+      { key: 'active' },
+      { $set: { records, importedAt: new Date() } },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+    );
     return res.json({
-      message: 'Admission CSV imported successfully.',
-      filePath,
+      message: `Admission list imported successfully (${records.length} records).`,
+      importedCount: records.length,
     });
   } catch (error) {
     return res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to import CSV file.' });
   }
 });
 
-router.post('/lecturers/import', protect, authorize('department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
+router.post('/lecturers/import', protect, authorize('department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
   const parsed = z.object({ csv: z.string().min(10).max(2_000_000) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: 'A valid lecturer CSV is required.' });
 

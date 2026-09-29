@@ -6,7 +6,10 @@ export type Role =
   | 'finance_officer'
   | 'student_affairs'
   | 'system_admin'
-  | 'super_admin';
+  | 'super_admin'
+  | 'hod'
+  | 'pro_vc'
+  | 'vc';
 
 export type UserSession = {
   id: string;
@@ -28,6 +31,9 @@ export const roleLabels: Record<Role, string> = {
   student_affairs: 'Student Affairs',
   system_admin: 'System Admin',
   super_admin: 'Super Admin',
+  hod: 'Head of Department',
+  pro_vc: 'Pro Vice Chancellor',
+  vc: 'Vice Chancellor',
 };
 
 export const roleRoutes: Record<Role, string> = {
@@ -39,6 +45,9 @@ export const roleRoutes: Record<Role, string> = {
   student_affairs: '/dashboard/admin',
   system_admin: '/dashboard/admin',
   super_admin: '/dashboard/admin',
+  hod: '/dashboard/admin',
+  pro_vc: '/dashboard/admin',
+  vc: '/dashboard/admin',
 };
 
 export function getDashboardPath(role: Role | string) {
@@ -48,22 +57,27 @@ export function getDashboardPath(role: Role | string) {
 export function canAccessRole(role: Role | string, requiredRole: Role | string) {
   if (!role || !requiredRole) return false;
 
-  const roleMap: Record<string, string[]> = {
-    student: ['student'],
-    lecturer: ['lecturer'],
-    department_admin: ['department_admin'],
-    academic_officer: ['academic_officer'],
-    finance_officer: ['finance_officer'],
-    student_affairs: ['student_affairs'],
-    system_admin: ['system_admin', 'super_admin'],
-    super_admin: ['super_admin'],
+  const rolePriorities: Record<string, number> = {
+    student: 0,
+    lecturer: 1,
+    department_admin: 2,
+    academic_officer: 3,
+    finance_officer: 4,
+    student_affairs: 5,
+    system_admin: 6,
+    super_admin: 7,
+    hod: 8,
+    pro_vc: 9,
+    vc: 10,
   };
 
-  return (roleMap[role] || []).includes(requiredRole as string);
+  const currentRank = rolePriorities[String(role)] ?? -1;
+  const requiredRank = rolePriorities[String(requiredRole)] ?? -1;
+  return currentRank >= requiredRank;
 }
 
 export function isAdminRole(role?: Role | string) {
-  return ['department_admin', 'academic_officer', 'finance_officer', 'student_affairs', 'system_admin', 'super_admin'].includes(String(role || ''));
+  return ['department_admin', 'academic_officer', 'finance_officer', 'student_affairs', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'].includes(String(role || ''));
 }
 
 export function canAccessRoute(role: Role | string, pathname: string) {
@@ -129,6 +143,39 @@ export function canAccessRoute(role: Role | string, pathname: string) {
       '/dashboard/admin/payments',
     ],
     super_admin: [
+      '/dashboard/admin',
+      '/dashboard/admin/users',
+      '/dashboard/admin/courses',
+      '/dashboard/admin/attendance',
+      '/dashboard/admin/timetable',
+      '/dashboard/admin/fees',
+      '/dashboard/admin/results',
+      '/dashboard/admin/requests',
+      '/dashboard/admin/payments',
+    ],
+    hod: [
+      '/dashboard/admin',
+      '/dashboard/admin/users',
+      '/dashboard/admin/courses',
+      '/dashboard/admin/attendance',
+      '/dashboard/admin/timetable',
+      '/dashboard/admin/fees',
+      '/dashboard/admin/results',
+      '/dashboard/admin/requests',
+      '/dashboard/admin/payments',
+    ],
+    pro_vc: [
+      '/dashboard/admin',
+      '/dashboard/admin/users',
+      '/dashboard/admin/courses',
+      '/dashboard/admin/attendance',
+      '/dashboard/admin/timetable',
+      '/dashboard/admin/fees',
+      '/dashboard/admin/results',
+      '/dashboard/admin/requests',
+      '/dashboard/admin/payments',
+    ],
+    vc: [
       '/dashboard/admin',
       '/dashboard/admin/users',
       '/dashboard/admin/courses',

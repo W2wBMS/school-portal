@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import ResultApprovalStatus from '@/components/ResultApprovalStatus';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 type Course = { _id: string; code: string; title: string; semester: string };
 type Student = { _id: string; fullName: string; studentId?: string; email: string; level?: string };
 type RosterEntry = { student: Student };
-type Result = { _id: string; score: number; grade: string; semester: string; approved: boolean; finalized: boolean; studentId?: Student; courseId?: Course; createdAt?: string };
+type ApprovalActor = string | { _id: string; fullName?: string; role?: string } | null;
+type Result = { _id: string; score: number; grade: string; semester: string; approved: boolean; finalized: boolean; resultApprovals?: { hod?: ApprovalActor; lecturer?: ApprovalActor; admin?: ApprovalActor }; studentId?: Student; courseId?: Course; createdAt?: string };
 
 function authHeaders(contentType = false) {
   return {
@@ -29,6 +31,10 @@ export default function LecturerResultsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [editingResultId, setEditingResultId] = useState<string | null>(null);
+  const [editingScore, setEditingScore] = useState('');
+  const [editingReason, setEditingReason] = useState('');
+  const [approvingResultId, setApprovingResultId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -133,6 +139,69 @@ export default function LecturerResultsPage() {
     }
   }
 
+  function startEditResult(result: Result) {
+    setEditingResultId(result._id);
+    setEditingScore(String(result.score ?? 0));
+    setEditingReason('');
+    setError('');
+    setMessage('');
+  }
+
+  function cancelEditResult() {
+    setEditingResultId(null);
+    setEditingScore('');
+    setEditingReason('');
+  }
+
+  async function saveEditResult(result: Result) {
+    try {
+      const nextScore = Number(editingScore);
+      if (!Number.isFinite(nextScore) || nextScore < 0 || nextScore > 100) {
+        throw new Error('Score must be between 0 and 100.');
+      }
+      if (result.finalized && !editingReason.trim()) {
+        throw new Error('Enter a reason for correcting this finalized result.');
+      }
+
+      const response = await fetch(`${API_BASE}/portal/results/${result._id}${result.finalized ? '/correct' : ''}`, {
+        method: result.finalized ? 'POST' : 'PATCH',
+        credentials: 'include',
+        headers: authHeaders(true),
+        body: JSON.stringify(result.finalized ? { score: nextScore, reason: editingReason.trim() } : { score: nextScore }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Unable to update this result.');
+
+      setResults((current) => current.map((item) => item._id === result._id ? { ...item, ...data.result } : item));
+      cancelEditResult();
+      setMessage(result.finalized ? 'Result corrected and re-submitted for all required approvals.' : 'Result updated and re-queued for the required approvals.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update this result.');
+    }
+  }
+
+  async function approveResult(result: Result) {
+    setApprovingResultId(result._id);
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch(`${API_BASE}/portal/results/${result._id}/approve`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: authHeaders(true),
+        body: JSON.stringify({ approvalType: 'lecturer' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Unable to approve this result.');
+      setResults((current) => current.map((item) => item._id === result._id ? data.result : item));
+      setMessage(data.complete ? 'All approvals are complete. The result is published.' : 'Lecturer approval recorded. The result is waiting for the HOD and Admin approvals.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to approve this result.');
+    } finally {
+      setApprovingResultId(null);
+    }
+  }
+
   async function readCsvFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -176,7 +245,18 @@ export default function LecturerResultsPage() {
       <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
         <h3 className="text-lg font-bold text-[#11222d]">Recent course results</h3>
         <div className="mt-4 space-y-2">
-          {courseResults.length === 0 ? <p className="text-sm text-slate-500">No results submitted for this course yet.</p> : courseResults.map((result) => <div key={result._id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#f8fafc] p-3"><div><strong className="text-sm text-[#11222d]">{result.studentId?.fullName || 'Student'}</strong><p className="text-xs text-slate-500">{result.semester} · {result.grade}</p></div><div className="flex items-center gap-3"><strong className="text-[#0d5a4d]">{result.score}</strong><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${result.approved ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{result.approved ? 'Published' : 'Pending approval'}</span></div></div>)}
+          {courseResults.length === 0 ? <p className="text-sm text-slate-500">No results submitted for this course yet.</p> : courseResults.map((result) => <div key={result._id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#f8fafc] p-3"><div><strong className="text-sm text-[#11222d]">{result.studentId?.fullName || 'Student'}</strong><p className="text-xs text-slate-500">{result.semester} · {result.grade}</p></div><div className="flex items-center gap-3"><div className="flex items-center gap-2">
+            {editingResultId === result._id ? (
+              <>
+                <input aria-label={`Edit score for ${result.studentId?.fullName || 'student'}`} type="number" min="0" max="100" step="0.01" value={editingScore} onChange={(event) => setEditingScore(event.target.value)} className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+                {result.finalized && <input aria-label="Correction reason" value={editingReason} onChange={(event) => setEditingReason(event.target.value)} placeholder="Correction reason" className="w-40 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />}
+                <button type="button" onClick={() => saveEditResult(result)} className="rounded-lg bg-[#0d5a4d] px-2.5 py-1.5 text-xs font-semibold text-white">Save</button>
+                <button type="button" onClick={cancelEditResult} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700">Cancel</button>
+              </>
+            ) : (
+              <strong className="text-[#0d5a4d]">{result.score}</strong>
+            )}
+          </div><div className="flex flex-col items-start gap-2 sm:items-end"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${result.approved ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{result.approved ? 'Published' : 'Pending approval'}</span><ResultApprovalStatus approvals={result.resultApprovals} /></div>{editingResultId !== result._id && <div className="flex flex-wrap items-center gap-2">{!result.finalized && !result.resultApprovals?.lecturer && <button type="button" disabled={approvingResultId === result._id} onClick={() => approveResult(result)} className="rounded-lg bg-[#0d5a4d] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60">{approvingResultId === result._id ? 'Approving...' : 'Approve'}</button>}<button type="button" onClick={() => startEditResult(result)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#11222d] transition hover:border-[#0d5a4d] hover:text-[#0d5a4d]">{result.finalized ? 'Correct score' : 'Edit score'}</button></div>}</div></div>)}
         </div>
       </section>
     </div>

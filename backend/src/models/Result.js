@@ -41,11 +41,16 @@ const resultSchema = new mongoose.Schema(
     },
     approved: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     finalized: { type: Boolean, default: false },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     approvedAt: Date,
+    resultApprovals: {
+      hod: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      lecturer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      admin: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    },
     correctionReason: { type: String, default: '' },
   },
   { timestamps: true }
