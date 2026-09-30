@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const User = require('../src/models/User');
 const StudentProfile = require('../src/models/StudentProfile');
@@ -8,8 +9,33 @@ const AdmissionList = require('../src/models/AdmissionList');
 const authRouter = require('../src/routes/auth');
 const { parseAdmissionsCsv } = require('../src/utils/admissions');
 
+let memoryServer;
+
+async function connectTestDatabase() {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  if (process.env.MONGO_URI) {
+    await mongoose.connect(process.env.MONGO_URI);
+    return;
+  }
+
+  if (!memoryServer) {
+    memoryServer = await MongoMemoryServer.create();
+  }
+
+  await mongoose.connect(memoryServer.getUri('student-portal-test'));
+}
+
+async function disconnectTestDatabase() {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+}
+
 test('User password hashes during save without a next callback', async () => {
-  await mongoose.connect('mongodb://127.0.0.1:27017/student-portal-test');
+  await connectTestDatabase();
   await mongoose.connection.db.dropDatabase().catch(() => {});
 
   const user = new User({
@@ -25,11 +51,11 @@ test('User password hashes during save without a next callback', async () => {
   assert.ok(user.password.length > 20);
 
   await User.deleteMany({});
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test('User generates an 8-digit student index starting with 1029 when no ID is provided', async () => {
-  await mongoose.connect('mongodb://127.0.0.1:27017/student-portal-test');
+  await connectTestDatabase();
   await mongoose.connection.db.dropDatabase().catch(() => {});
 
   const firstUser = new User({
@@ -56,11 +82,11 @@ test('User generates an 8-digit student index starting with 1029 when no ID is p
   assert.notEqual(firstUser.studentId, secondUser.studentId);
 
   await User.deleteMany({});
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test('New student profiles default to zero CGPA and credits completed', async () => {
-  await mongoose.connect('mongodb://127.0.0.1:27017/student-portal-test');
+  await connectTestDatabase();
   await mongoose.connection.db.dropDatabase().catch(() => {});
 
   const user = new User({
@@ -85,11 +111,11 @@ test('New student profiles default to zero CGPA and credits completed', async ()
 
   await StudentProfile.deleteMany({});
   await User.deleteMany({});
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
 
 test('Admissions lookup accepts a numeric level when the imported record stores Level 100', async () => {
-  await mongoose.connect('mongodb://127.0.0.1:27017/student-portal-test');
+  await connectTestDatabase();
   await mongoose.connection.db.dropDatabase().catch(() => {});
 
   const records = parseAdmissionsCsv('fullName,programme,department,level,email\nTest Student,Computer Science,Computing,Level 100,test.student@example.com');
@@ -100,5 +126,5 @@ test('Admissions lookup accepts a numeric level when the imported record stores 
   assert.equal(record.fullName, 'Test Student');
 
   await AdmissionList.deleteMany({});
-  await mongoose.disconnect();
+  await disconnectTestDatabase();
 });
