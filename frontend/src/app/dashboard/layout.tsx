@@ -136,7 +136,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const visibleNav = roleNav.filter((item) => canAccessRoute(user.role, item.href));
   const currentNav = visibleNav.find((item) => pathname === item.href);
   const pageLabel = currentNav?.label || 'Overview';
-  const railItems = visibleNav.slice(0, 5);
 
   return (
     <div className="min-h-screen px-3 py-3 sm:px-6 sm:py-6">
@@ -170,22 +169,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        <div className="grid gap-0 lg:grid-cols-[64px_220px_minmax(0,1fr)] xl:grid-cols-[64px_220px_minmax(0,1fr)_248px]">
-          <aside className="dashboard-rail hidden flex-col items-center gap-3 px-2 py-5 lg:flex">
-            <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#d5b675] text-[#083f39]" title="Regent University College of Science and Technology"><ShieldCheck size={19} /></div>
-            <nav className="flex flex-col items-center gap-2" aria-label="Quick navigation">
-              {railItems.map((item) => (
-                <Link key={item.label} href={item.href} aria-label={item.label} title={item.label} className={`flex h-10 w-10 items-center justify-center rounded-xl ${pathname === item.href ? 'rail-active' : ''}`}>
-                  <item.icon size={17} strokeWidth={1.8} />
-                </Link>
-              ))}
-            </nav>
-            <div className="mt-auto flex flex-col items-center gap-2">
-              <button type="button" className="flex h-10 w-10 items-center justify-center rounded-xl" aria-label="Notifications" title="Notifications"><Bell size={17} strokeWidth={1.8} /></button>
-              <button type="button" onClick={handleLogout} className="flex h-10 w-10 items-center justify-center rounded-xl" aria-label="Log out" title="Log out"><LogOut size={17} strokeWidth={1.8} /></button>
-            </div>
-          </aside>
-
+        <div className="grid gap-0 lg:grid-cols-[232px_minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,1fr)_256px]">
           <aside className={`dashboard-sidebar ${menuOpen ? 'block' : 'hidden'} rounded-[26px] bg-[#f5faf7] p-4 ring-1 ring-[#dfe7e1] lg:block`}>
             <div className="mb-6 rounded-2xl bg-white p-4 ring-1 ring-[#dfe7e1] shadow-sm">
               <div className="flex items-center gap-3">

@@ -15,7 +15,7 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: CORS_ORIGIN
+      - key: CORS_ORIGINS
         value: https://rucst-student-portal-web.onrender.com
       - key: FRONTEND_URL
         value: https://rucst-student-portal-web.onrender.com
@@ -40,3 +40,4 @@ services:
           type: web
           name: rucst-student-portal-api
           property: hostport
+          

@@ -7,6 +7,7 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const { csrfProtection, setCsrfCookie } = require('./middleware/csrf');
 const { getDatabaseStatus, isDatabaseUnavailable } = require('./utils/databaseStatus');
+const { getAllowedOrigins } = require('./utils/corsOrigins');
 
 dotenv.config();
 
@@ -14,7 +15,10 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin(origin, callback) {
+    if (!origin || getAllowedOrigins().includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json());

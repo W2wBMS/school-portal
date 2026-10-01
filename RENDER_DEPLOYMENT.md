@@ -25,12 +25,13 @@ The Blueprint supplies the production settings used by the app:
 
 - `MONGO_URI`: Atlas connection string, stored as a Render secret.
 - `JWT_SECRET`: generated secret with the required production length.
-- `CORS_ORIGIN` and `FRONTEND_URL`: generated frontend origin, used for API security and password-reset links.
+- `CORS_ORIGINS`: comma-separated exact frontend origins permitted by API CORS. Production should contain only the deployed frontend origin; local origins are allowed automatically outside production.
+- `FRONTEND_URL`: generated frontend origin used for password-reset links.
 - `NEXT_PUBLIC_API_URL=/api`: keeps browser API calls on the frontend origin.
 - `BACKEND_HOSTPORT`: Render private hostname and port, referenced from the API service.
 - The protected admissions import stores only the fields needed for verification in MongoDB, so admissions data does not need to be committed to Git or written to Render's ephemeral filesystem.
 
-If you attach a custom frontend domain, update `CORS_ORIGIN` and `FRONTEND_URL` to its exact HTTPS origin in the API service. Keep `NEXT_PUBLIC_API_URL` set to `/api` so requests continue through the proxy. If you use a custom API domain directly instead of the proxy, revisit the cookie, CORS, and CSRF settings before deployment.
+The frontend calls `/api`, and the Next.js server forwards those requests to the backend using Render's private `BACKEND_HOSTPORT`; browser requests therefore remain same-origin. If you attach a custom frontend domain, update `CORS_ORIGINS` and `FRONTEND_URL` to its exact HTTPS origin in the API service. Keep `NEXT_PUBLIC_API_URL` set to `/api` so requests continue through the proxy. For local development, the API allows `localhost:3000`, `127.0.0.1:3000`, and `localhost:5173` when `NODE_ENV` is not `production`. If you use a custom API domain directly instead of the proxy, revisit the cookie, CORS, and CSRF settings before deployment.
 
 Add `PAYMENT_WEBHOOK_SECRET` if payment callbacks are enabled. Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `MAIL_FROM` to enable email delivery. Set `CURRENT_SEMESTER`, `CURRENT_ACADEMIC_YEAR`, and registration-window variables when needed.
 

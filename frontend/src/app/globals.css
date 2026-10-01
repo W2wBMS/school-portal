@@ -1,20 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f3ef;
+  --background: #f1f4ef;
   --panel: #ffffff;
   --surface: #ffffff;
-  --foreground: #182b29;
-  --muted: #71807a;
-  --line: #e5e7e1;
-  --teal: #146b55;
-  --teal-dark: #103c32;
-  --forest: #103c32;
-  --teal-soft: #e8f2ec;
-  --aqua: #bdd8cb;
-  --sand: #e9c779;
-  --danger: #b4534a;
-  --shadow: 0 24px 70px rgba(24, 47, 43, 0.07);
+  --foreground: #172b27;
+  --muted: #687a73;
+  --line: #dce5df;
+  --teal: #176c56;
+  --teal-dark: #123d34;
+  --forest: #123d34;
+  --teal-soft: #e7f1eb;
+  --aqua: #c4ded2;
+  --sand: #e6c36f;
+  --danger: #b34f48;
+  --shadow: 0 20px 58px rgba(25, 48, 40, 0.085);
 }
 
 @theme inline {
@@ -36,8 +36,8 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--background);
-  background-image: radial-gradient(rgba(20, 107, 85, 0.075) 0.65px, transparent 0.65px);
-  background-size: 18px 18px;
+  background-image: radial-gradient(rgba(23, 108, 86, 0.075) 0.7px, transparent 0.7px), linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 58%);
+  background-size: 20px 20px, 100% 100%;
   color: var(--foreground);
   font-family: var(--font-manrope), sans-serif;
 }
@@ -65,10 +65,10 @@ input, select, button {
 }
 
 .panel-shell {
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(14px);
   animation: page-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -94,9 +94,9 @@ input, select, button {
 .login-frame {
   background: #fff;
   color: var(--foreground);
-  border: 1px solid rgba(24, 38, 43, 0.08);
-  border-radius: 28px;
-  box-shadow: 0 32px 90px rgba(18, 44, 36, 0.16);
+  border: 1px solid rgba(24, 48, 40, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 28px 76px rgba(18, 44, 36, 0.15);
 }
 
 .login-identity {
@@ -106,7 +106,7 @@ input, select, button {
 }
 
 .login-page {
-  background: radial-gradient(ellipse at 15% 85%, rgba(195, 216, 202, .54), transparent 36%), #f0f1eb;
+  background: radial-gradient(ellipse at 15% 85%, rgba(195, 216, 202, .45), transparent 36%), linear-gradient(130deg, #f5f7f2, #e9efea);
 }
 
 .login-frame > section:last-child { background: #fff !important; }
@@ -188,24 +188,6 @@ input, select, button {
   animation: page-rise 0.55s 80ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.dashboard-rail {
-  background: var(--teal-dark);
-  color: #d9ece6;
-}
-
-.dashboard-rail button,
-.dashboard-rail a {
-  color: #a9c9c0;
-  transition: color 180ms ease, background-color 180ms ease, transform 180ms ease;
-}
-
-.dashboard-rail button:hover,
-.dashboard-rail a:hover,
-.dashboard-rail .rail-active {
-  background: rgba(255, 255, 255, 0.12);
-  color: white;
-}
-
 .context-panel {
   min-width: 0;
   background: #f6faf8;
@@ -213,14 +195,22 @@ input, select, button {
 }
 
 .dashboard-shell {
-  border-color: rgba(22, 53, 43, 0.09);
-  box-shadow: 0 30px 90px rgba(27, 46, 36, 0.11);
+  border-color: rgba(22, 53, 43, 0.12);
+  border-radius: 12px !important;
+  box-shadow: 0 28px 84px rgba(27, 46, 36, 0.12);
 }
 
 .dashboard-header {
-  background: linear-gradient(110deg, #103c32, #175644);
+  background-color: #123d34;
+  background-image: linear-gradient(110deg, #123d34 0%, #17624d 72%, #1b735a 100%);
   color: white;
   border-bottom-color: #31735e;
+}
+
+.dashboard-header h1 {
+  max-width: 700px;
+  font-size: 21px;
+  line-height: 1.35;
 }
 
 .dashboard-sidebar {
@@ -234,7 +224,7 @@ input, select, button {
 }
 
 .dashboard-main {
-  background: #fbfbf8;
+  background: linear-gradient(145deg, #fbfcf9, #f7faf7 65%, #f4f8f5);
 }
 
 .dashboard-shell > div[class*="grid"] {
@@ -246,7 +236,7 @@ input, select, button {
 }
 
 .dashboard-header {
-  min-height: 86px;
+  min-height: 88px;
 }
 
 .dashboard-content {
@@ -255,11 +245,7 @@ input, select, button {
 
 @media (min-width: 1024px) {
   .dashboard-shell > div[class*="grid"] {
-    grid-template-columns: 64px 220px minmax(0, 1fr);
-  }
-
-  .dashboard-rail {
-    display: flex !important;
+    grid-template-columns: 232px minmax(0, 1fr);
   }
 
   .dashboard-sidebar {
@@ -269,7 +255,7 @@ input, select, button {
 
 @media (min-width: 1280px) {
   .dashboard-shell > div[class*="grid"] {
-    grid-template-columns: 64px 220px minmax(0, 1fr) 248px;
+    grid-template-columns: 232px minmax(0, 1fr) 256px;
   }
 }
 
@@ -367,8 +353,9 @@ input, select, button {
 
 .dashboard-main [class*="rounded-[28px]"],
 .dashboard-main [class*="rounded-[24px]"] {
-  border-color: rgba(24, 38, 43, 0.075);
-  box-shadow: 0 12px 32px rgba(24, 38, 43, 0.035);
+  border-color: rgba(24, 48, 40, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(24, 48, 40, 0.045);
   transition: box-shadow 220ms ease, transform 220ms ease, border-color 220ms ease;
 }
 
@@ -383,7 +370,7 @@ input, select, button {
 
 .student-hero {
   min-height: 245px;
-  background-image: radial-gradient(ellipse at 80% 0%, rgba(230, 201, 126, .24), transparent 38%), linear-gradient(115deg, #103c32, #146b55);
+  background-image: repeating-linear-gradient(132deg, transparent 0 30px, rgba(255, 255, 255, .035) 31px 32px, transparent 33px 64px), linear-gradient(115deg, #123d34, #176c56);
   box-shadow: 0 20px 44px rgba(16, 60, 50, .16);
 }
 
@@ -398,6 +385,11 @@ input, select, button {
   mask-image: linear-gradient(90deg, transparent, black);
 }
 
+.student-hero > div.absolute,
+.login-identity > div.absolute {
+  display: none;
+}
+
 .metric-card {
   position: relative;
   overflow: hidden;
@@ -405,15 +397,7 @@ input, select, button {
 }
 
 .metric-card::after {
-  position: absolute;
-  right: -25px;
-  bottom: -35px;
-  width: 105px;
-  height: 105px;
-  border: 1px solid rgba(20, 107, 85, .09);
-  border-radius: 50%;
-  content: "";
-  box-shadow: 0 0 0 12px rgba(20, 107, 85, .025), 0 0 0 26px rgba(20, 107, 85, .02);
+  content: none;
 }
 
 .dashboard-main [class*="rounded-[28px]"]:hover,
@@ -431,11 +415,65 @@ input, select, button {
 }
 
 .dashboard-main input:focus,
-.dashboard-main select:focus {
+.dashboard-main select:focus,
+.dashboard-main textarea:focus {
   border-color: rgba(18, 60, 70, 0.55);
   box-shadow: 0 0 0 4px rgba(18, 60, 70, 0.08);
   outline: none;
   background: white;
+}
+
+.dashboard-main textarea {
+  min-height: 104px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.dashboard-main table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+}
+
+.dashboard-main thead th {
+  padding: 0.8rem 1rem;
+  background: #f1f6f2;
+  color: #60746b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-main tbody td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #e8eee9;
+  color: #263a34;
+  font-size: 0.875rem;
+}
+
+.dashboard-main tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dashboard-main button {
+  transition: filter 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.dashboard-main button:not(:disabled):hover {
+  filter: brightness(1.04);
+}
+
+.dashboard-main button:disabled {
+  cursor: not-allowed;
+}
+
+@media (min-width: 768px) {
+  .dashboard-header h1 {
+    font-size: 23px;
+  }
 }
 
 .dashboard-main button,
@@ -468,12 +506,6 @@ input, select, button {
   }
 }
 
-@media (max-width: 1023px) {
-  .dashboard-rail {
-    display: none;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -488,7 +520,6 @@ input, select, button {
     background: white;
   }
 
-  .dashboard-rail,
   .dashboard-sidebar,
   .dashboard-header,
   .context-panel,
