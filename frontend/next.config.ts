@@ -5,16 +5,16 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   async rewrites() {
-    const backendHost = process.env.BACKEND_HOSTPORT;
-    if (process.env.NODE_ENV === 'production' && !backendHost) {
-      throw new Error('BACKEND_HOSTPORT must be set for production');
+    const backendUrl = process.env.BACKEND_URL;
+    if (process.env.NODE_ENV === 'production' && !backendUrl) {
+      throw new Error('BACKEND_URL must be set for production');
     }
 
-    const destinationHost = backendHost || 'localhost:5000';
+    const destinationUrl = (backendUrl || 'http://localhost:5000').replace(/\/+$/, '');
     return [
       {
         source: '/api/:path*',
-        destination: `http://${destinationHost}/api/:path*`,
+        destination: `${destinationUrl}/api/:path*`,
       },
     ];
   },

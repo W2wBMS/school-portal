@@ -35,9 +35,6 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: /api
-      - key: BACKEND_HOSTPORT
-        fromService:
-          type: web
-          name: rucst-student-portal-api
-          property: hostport
+      - key: BACKEND_URL
+        value: https://rucst-student-portal-api.onrender.com
           
