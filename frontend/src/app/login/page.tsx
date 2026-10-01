@@ -7,7 +7,7 @@ import { getDashboardPath, type Role } from '@/lib/auth';
 import { fetchCsrfToken } from '@/lib/csrf';
 import PasswordInput from '@/components/PasswordInput';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:5000/api');
 
 export default function LoginPage() {
   const router = useRouter();

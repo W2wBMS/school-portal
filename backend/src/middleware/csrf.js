@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { getJwtSecret } = require('../utils/jwtSecret');
+const { getAllowedOrigins } = require('../utils/corsOrigins');
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -18,8 +19,9 @@ function setCsrfCookie(res) {
 function csrfProtection(req, res, next) {
   if (SAFE_METHODS.has(req.method) || req.path === '/api/v1/payments/webhook') return next();
 
-  const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-  if (req.get('origin') === allowedOrigin) return next();
+  const allowedOrigins = new Set(getAllowedOrigins());
+  const originHeader = req.get('origin');
+  if (originHeader && allowedOrigins.has(originHeader)) return next();
 
   const authorization = req.get('authorization') || '';
   if (authorization.startsWith('Bearer ')) {

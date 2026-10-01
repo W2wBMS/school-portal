@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { getAllowedOrigins } = require('../src/utils/corsOrigins');
+const { csrfProtection } = require('../src/middleware/csrf');
 
 test('production CORS includes configured frontend origins without local origins', () => {
   const origins = getAllowedOrigins({
@@ -24,4 +25,32 @@ test('development CORS includes local and configured frontend origins', () => {
     'http://localhost:5173',
     'http://127.0.0.1:3000',
   ]);
+});
+
+test('csrf middleware accepts Render CORS_ORIGINS without requiring CORS_ORIGIN', () => {
+  const previous = { ...process.env };
+  process.env.NODE_ENV = 'production';
+  process.env.CORS_ORIGIN = '';
+  process.env.CORS_ORIGINS = 'https://portal.onrender.com';
+
+  let called = false;
+  const req = {
+    method: 'POST',
+    path: '/api/v1/auth/login',
+    cookies: {},
+    get: (name) => (name === 'origin' ? 'https://portal.onrender.com' : undefined),
+  };
+  const res = { status: () => ({ json: () => ({}) }) };
+  const next = () => { called = true; };
+
+  csrfProtection(req, res, next);
+
+  assert.equal(called, true);
+
+  Object.keys(previous).forEach((key) => {
+    process.env[key] = previous[key];
+  });
+  Object.keys(process.env).forEach((key) => {
+    if (!(key in previous)) delete process.env[key];
+  });
 });
