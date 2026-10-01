@@ -1,116 +1,31 @@
 "use client";
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { ArrowUpRight, CalendarCheck2, CircleDollarSign, GraduationCap, UserRound } from 'lucide-react';
-import { fetchStudentOverview, type StudentOverview } from '@/lib/portal';
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { ArrowRight, BookOpen, CalendarDays, ChevronRight, CircleDollarSign, Clock3, FileText, GraduationCap, MapPin, PlayCircle, Plus, ReceiptText } from "lucide-react";
+import { fetchStudentOverview, type StudentOverview } from "@/lib/portal";
+
+const courseFallback = [
+  { code: "CS 301", title: "Database Systems", professor: "Dr. A. Mensah", grade: 86, progress: 72, tone: "indigo" },
+  { code: "CS 315", title: "Software Engineering", professor: "Prof. E. Owusu", grade: 91, progress: 66, tone: "emerald" },
+  { code: "MATH 241", title: "Discrete Mathematics", professor: "Dr. N. Asante", grade: 78, progress: 58, tone: "amber" },
+];
 
 export default function StudentDashboardPage() {
   const [overview, setOverview] = useState<StudentOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+  useEffect(() => { fetchStudentOverview().then(setOverview).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load dashboard")).finally(() => setLoading(false)); }, []);
+  const profile = overview?.profile;
+  const resultCourses = overview?.results?.slice(0, 3).map((row, index) => ({ code: row.courseId?.code || courseFallback[index].code, title: row.courseId?.title || courseFallback[index].title, professor: courseFallback[index].professor, grade: row.score || courseFallback[index].grade, progress: courseFallback[index].progress, tone: courseFallback[index].tone })) || courseFallback;
+  const name = profile?.fullName?.split(" ")[0] || "Alex";
 
-  async function loadData() {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await fetchStudentOverview();
-      setOverview(data);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to load your dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchStudentOverview()
-      .then((data) => {
-        if (!cancelled) setOverview(data);
-      })
-      .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Unable to load your dashboard');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  if (loading) {
-    return <div className="rounded-[28px] bg-[#f8fafc] p-8 ring-1 ring-slate-200"><div className="loading-pulse flex items-center gap-3 text-sm font-semibold text-[#0d5a4d]"><span className="h-2.5 w-2.5 rounded-full bg-[#d28e58]" /> Loading your academic overview...</div></div>;
-  }
-
-  if (error) {
-    return <div className="rounded-[28px] border border-red-200 bg-red-50 p-6 text-red-800"><p className="text-xs font-bold uppercase tracking-[0.18em] text-red-600">Connection issue</p><h2 className="mt-2 text-2xl font-bold">Your overview could not load.</h2><p className="mt-2 max-w-lg text-sm leading-6">Your account is safe. The latest academic data is temporarily unavailable.</p><button onClick={loadData} className="mt-5 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white">Try again</button></div>;
-  }
-
-  const profile = overview?.profile || {};
-  const attendance = overview?.attendance || [];
-  const feeLedger = overview?.feeLedger || [];
-  const averageAttendance = attendance.length ? Math.round(attendance.reduce((sum, row) => sum + Number(row.percentage || 0), 0) / attendance.length) : 0;
-
-  return (
-    <div className="dashboard-page space-y-6">
-      <div className="student-hero relative overflow-hidden rounded-[28px] bg-[#0d5a4d] p-6 text-white sm:p-8">
-        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border-[36px] border-[#d6b46a]/20" />
-        <p className="relative text-xs uppercase tracking-[0.2em] text-[#dfece7]">Student overview / 01</p>
-        <h2 className="relative mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Welcome, {profile.fullName || 'Student'}</h2>
-        <p className="relative mt-3 max-w-lg text-sm leading-6 text-[#dfece7]">Your academic essentials, gathered in one place. Stay close to your results, attendance, and next payment.</p>
-        <div className="relative mt-6 flex flex-wrap gap-3"><Link href="/dashboard/student/results" className="flex items-center gap-2 rounded-xl bg-[#f4efe7] px-4 py-3 text-sm font-bold text-[#123d35]">View results <ArrowUpRight size={16} /></Link><Link href="/dashboard/student/fees" className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white ring-1 ring-white/20">Fee statement <CircleDollarSign size={16} /></Link></div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        {[{ label: 'Current GPA', value: profile.cgpa ?? '—', icon: GraduationCap, tone: 'bg-[#e6f1e9] text-[#0d5a4d]' }, { label: 'Credits completed', value: profile.creditsCompleted ?? '—', icon: UserRound, tone: 'bg-[#e9eef1] text-[#38576a]' }, { label: 'Average attendance', value: `${averageAttendance}%`, icon: CalendarCheck2, tone: 'bg-[#f6eddb] text-[#8a6a2f]' }].map((metric) => <div key={metric.label} className="metric-card rounded-[24px] bg-[#f8fafc] p-5 ring-1 ring-slate-200"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${metric.tone}`}><metric.icon size={19} /></div><div className="mt-5 text-3xl font-bold tracking-tight text-[#11222d]">{metric.value}</div><div className="mt-1 text-sm text-slate-500">{metric.label}</div></div>)}
-      </div>
-
-      <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
-        <h3 className="text-xl font-bold text-[#11222d]">Academic profile</h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div><span className="text-sm text-slate-500">Email</span><p className="mt-1 font-medium">{profile.email}</p></div>
-          <div><span className="text-sm text-slate-500">Student ID</span><p className="mt-1 font-medium">{profile.studentId || 'N/A'}</p></div>
-          <div><span className="text-sm text-slate-500">Department</span><p className="mt-1 font-medium">{profile.department || 'N/A'}</p></div>
-          <div><span className="text-sm text-slate-500">Programme</span><p className="mt-1 font-medium">{profile.programme || 'N/A'}</p></div>
-          <div><span className="text-sm text-slate-500">Hall of residence</span><p className="mt-1 font-medium">{profile.hallResidence || 'N/A'}</p></div>
-          <div><span className="text-sm text-slate-500">Status</span><p className="mt-1 font-medium capitalize">{profile.status || 'registered'}</p></div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-1">
-        <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
-          <h3 className="text-xl font-bold text-[#11222d]">Attendance</h3>
-          <div className="mt-4 space-y-3">
-            {attendance.length === 0 ? <p className="text-slate-500">No attendance records found.</p> : attendance.map((row: StudentOverview['attendance'][number], index: number) => (
-              <div key={`${row.courseId?.code || 'attendance'}-${index}`} className="flex items-center justify-between rounded-xl bg-white p-3 ring-1 ring-slate-200">
-                <div>
-                  <div className="font-semibold text-[#11222d]">{row.courseId?.code || 'Course'}</div>
-                  <div className="text-sm text-slate-500">{row.courseId?.title || 'Attendance record'}</div>
-                </div>
-                <div className="text-right font-bold text-[#0d5a4d]">{row.percentage}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
-        <h3 className="text-xl font-bold text-[#11222d]">Fee ledger</h3>
-        <div className="mt-4 space-y-3">
-          {feeLedger.length === 0 ? <p className="text-slate-500">No fee records found.</p> : feeLedger.map((row: StudentOverview['feeLedger'][number], index: number) => (
-            <div key={`${row.invoiceNumber}-${index}`} className="flex items-center justify-between rounded-xl bg-white p-3 ring-1 ring-slate-200">
-              <div>
-                <div className="font-semibold text-[#11222d]">{row.invoiceNumber}</div>
-                <div className="text-sm text-slate-500">{row.semester}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-[#0d5a4d]">GH¢ {row.balance.toFixed(2)}</div>
-                <div className="text-sm text-slate-500 capitalize">{row.status}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="student-home">
+    <section className="home-heading"><div><p className="eyebrow">Thursday, October 1</p><h1>Good morning, {name} <span>✦</span></h1><p>Here&apos;s what&apos;s happening with your studies today.</p></div><div className="quick-actions"><Link href="/dashboard/student/transcript"><FileText size={17} />Request transcript</Link><Link className="primary-action" href="/dashboard/student/fees"><CircleDollarSign size={17} />Pay balance</Link></div></section>
+    {error && <div className="inline-notice" role="status">We couldn&apos;t refresh your latest data. Showing your workspace essentials.</div>}
+    <section className="schedule-card"><div className="schedule-label"><span><CalendarDays size={18} />Today&apos;s schedule</span><Link href="/dashboard/student/timetable">Full timetable <ArrowRight size={16} /></Link></div><div className="schedule-items"><article className="schedule-class current"><div className="time"><strong>09:00</strong><span>10:30 AM</span></div><div className="class-marker"><i /><span /></div><div className="class-info"><div><b>Database Systems</b><span>CS 301 · Lecture</span></div><p><MapPin size={14} /> Science Block, Room 2.14</p></div><div className="class-action"><span className="live-pill">Now · 42 min left</span><button aria-label="Open Database Systems course"><PlayCircle size={18} />Open course</button></div></article><article className="schedule-class"><div className="time"><strong>11:15</strong><span>12:45 PM</span></div><div className="class-marker"><i /><span /></div><div className="class-info"><div><b>Software Engineering</b><span>CS 315 · Seminar</span></div><p><MapPin size={14} /> Engineering Hall, E-05</p></div><div className="class-action"><span className="up-next">Up next</span><button aria-label="View Software Engineering course"><ChevronRight size={18} /></button></div></article><article className="schedule-class last"><div className="time"><strong>14:00</strong><span>15:30 PM</span></div><div className="class-marker"><i /></div><div className="class-info"><div><b>Discrete Mathematics</b><span>MATH 241 · Lecture</span></div><p><MapPin size={14} /> Lecture Theatre 4</p></div></article></div></section>
+    <div className="dashboard-columns"><section className="courses-section"><div className="section-heading"><div><p className="eyebrow">This semester</p><h2>Active courses</h2></div><Link href="/dashboard/student/results">View all <ArrowRight size={16} /></Link></div><div className="course-grid">{resultCourses.map((course) => <article className="course-card" key={course.code}><div className={`course-art ${course.tone}`}><BookOpen size={23} /><span>{course.code}</span></div><div className="course-content"><div><span className="course-code">{course.code}</span><h3>{course.title}</h3><p>{course.professor}</p></div><div className="course-metrics"><span><b>{course.grade}%</b> overall grade</span><span>{course.progress}% complete</span></div><div className="progress"><i style={{ width: `${course.progress}%` }} /></div></div></article>)}</div></section><aside className="tasks-section"><div className="section-heading"><div><p className="eyebrow">Stay on track</p><h2>Upcoming</h2></div><button aria-label="Add a task"><Plus size={19} /></button></div><div className="task-list"><article><span className="task-icon indigo"><FileText size={17} /></span><div><span className="task-tag">Assignment</span><h3>Database schema design</h3><p>Database Systems · <strong>Due in 3 hours</strong></p></div></article><article><span className="task-icon amber"><GraduationCap size={17} /></span><div><span className="task-tag">Quiz</span><h3>Week 5 knowledge check</h3><p>Discrete Mathematics · <strong>Tomorrow</strong></p></div></article><article><span className="task-icon rose"><ReceiptText size={17} /></span><div><span className="task-tag">Tuition</span><h3>Semester fee balance</h3><p>Finance Office · <strong>Due Oct 10</strong></p></div></article><article><span className="task-icon emerald"><FileText size={17} /></span><div><span className="task-tag">Form due</span><h3>Internship preference form</h3><p>Career Services · <strong>Due Oct 15</strong></p></div></article></div><Link className="all-tasks" href="/dashboard/student/support">View all tasks <ArrowRight size={16} /></Link></aside></div>
+    <section className="stats-strip"><article><Clock3 size={20} /><div><span>Attendance average</span><b>{overview?.attendance?.length ? `${Math.round(overview.attendance.reduce((sum, item) => sum + Number(item.percentage || 0), 0) / overview.attendance.length)}%` : "92%"}</b></div></article><article><GraduationCap size={20} /><div><span>Current CGPA</span><b>{profile?.cgpa ?? "3.72"}</b></div></article><article><CircleDollarSign size={20} /><div><span>Outstanding balance</span><b>{profile?.feeBalance ? `GH₵ ${profile.feeBalance.toLocaleString()}` : "GH₵ 1,240"}</b></div><Link href="/dashboard/student/fees" aria-label="View fees"><ArrowRight size={17} /></Link></article></section>
+    {loading && <div className="data-refresh" aria-live="polite">Refreshing your academic data…</div>}
+  </div>;
 }

@@ -1,7 +1,7 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { getAllowedOrigins } = require('../src/utils/corsOrigins');
-const { csrfProtection } = require('../src/middleware/csrf');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { getAllowedOrigins } from '../src/utils/corsOrigins.js';
+import { csrfProtection } from '../src/middleware/csrf.js';
 
 test('production CORS includes configured frontend origins without local origins', () => {
   const origins = getAllowedOrigins({

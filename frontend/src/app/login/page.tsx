@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowRight, BadgeCheck, BookOpen, ChevronDown, GraduationCap, ShieldCheck, Sparkles } from 'lucide-react';
 import { getDashboardPath, type Role } from '@/lib/auth';
 import { fetchCsrfToken } from '@/lib/csrf';
 import PasswordInput from '@/components/PasswordInput';
@@ -17,218 +18,92 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [claimOpen, setClaimOpen] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError('');
     setSuccess('');
     setLoading(true);
-
     try {
       const identifier = loginForm.identifier.trim();
       const csrfToken = await fetchCsrfToken();
       const response = await fetch(`${API_BASE}/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        credentials: 'include',
-        body: JSON.stringify(
-          identifier.includes('@')
-            ? { email: identifier, password: loginForm.password }
-            : { studentId: identifier, password: loginForm.password }
-        ),
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, credentials: 'include',
+        body: JSON.stringify(identifier.includes('@') ? { email: identifier, password: loginForm.password } : { studentId: identifier, password: loginForm.password }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
-
-      const user = data.user;
-      localStorage.setItem('portal_user', JSON.stringify(user));
+      if (!response.ok) throw new Error(data.message || 'Login failed');
+      localStorage.setItem('portal_user', JSON.stringify(data.user));
       localStorage.removeItem('portal_token');
-      router.push(getDashboardPath((user.role as Role) || 'student'));
+      router.push(getDashboardPath((data.user.role as Role) || 'student'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   async function handleClaimAccount(event: React.FormEvent) {
     event.preventDefault();
-    setError('');
-    setSuccess('');
-    setClaiming(true);
-
+    setError(''); setSuccess(''); setClaiming(true);
     try {
       const csrfToken = await fetchCsrfToken();
       const response = await fetch(`${API_BASE}/v1/auth/claim-account`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        credentials: 'include',
-        body: JSON.stringify(claimForm),
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, credentials: 'include', body: JSON.stringify(claimForm),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Unable to create your account');
-      }
-
-      setSuccess(`Account created successfully. Your student ID is ${data.studentId}. You can now sign in with it.`);
+      if (!response.ok) throw new Error(data.message || 'Unable to create your account');
+      setSuccess(`Your account is ready. Your student ID is ${data.studentId}. You can now sign in.`);
       setLoginForm({ identifier: data.studentId, password: claimForm.password });
       setClaimForm({ fullName: '', programme: '', department: '', level: '', password: '' });
+      setClaimOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setClaiming(false);
-    }
+    } finally { setClaiming(false); }
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-6 sm:px-8 lg:px-12">
-      <div className="login-frame grid w-full max-w-6xl overflow-hidden rounded-[10px] lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="login-identity relative flex min-h-[240px] flex-col justify-between overflow-hidden p-5 sm:min-h-[360px] sm:p-10 lg:min-h-[560px] lg:p-12">
-          <div className="absolute -bottom-20 -right-20 h-64 w-64 rounded-full border-[38px] border-[#d28e58]/35" />
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-black/20 text-lg font-black text-black">RUCST</div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-black">Established 1986</p>
-                  <h1 className="mt-1 text-lg font-bold tracking-tight">Regent University College of Science and Technology</h1>
-                </div>
-              </div>
-              <span className="text-3xl text-black">✦</span>
+    <main className="login-page min-h-screen px-4 py-4 sm:px-8 sm:py-8 lg:px-12 lg:py-10">
+      <div className="login-shell mx-auto grid min-h-[calc(100vh-2rem)] max-w-7xl overflow-hidden lg:min-h-[720px] lg:grid-cols-[1.05fr_.95fr]">
+        <section className="login-showcase relative flex flex-col overflow-hidden px-6 py-7 sm:px-10 sm:py-10 lg:px-14 lg:py-12">
+          <div className="showcase-orb showcase-orb-one" /><div className="showcase-orb showcase-orb-two" />
+          <header className="relative z-10 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="brand-mark">R</div>
+              <div><p className="text-xs font-extrabold uppercase tracking-[.18em] text-white/60">RUCST</p><p className="mt-0.5 text-sm font-semibold text-white">Campus Portal</p></div>
             </div>
-            <div className="login-rule mt-8" />
+            <span className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/85 backdrop-blur-sm"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Secure access</span>
+          </header>
+
+          <div className="relative z-10 my-auto max-w-xl py-12 lg:py-16">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-200/20 bg-amber-100/10 px-3 py-1.5 text-xs font-bold text-amber-100"><Sparkles size={14} /> Academic year 2026 / 27</div>
+            <h1 className="text-4xl font-extrabold leading-[1.04] tracking-[-.055em] text-white sm:text-5xl lg:text-6xl">Your campus, <span className="text-amber-200">connected.</span></h1>
+            <p className="mt-6 max-w-lg text-base leading-7 text-emerald-50/75">Stay on top of your courses, results, finance, and academic progress in one thoughtfully designed space.</p>
+            <div className="mt-10 grid max-w-lg gap-3 sm:grid-cols-3">
+              {[['Academic life', BookOpen], ['Verified records', BadgeCheck], ['Private & secure', ShieldCheck]].map(([label, Icon]) => { const ItemIcon = Icon as typeof BookOpen; return <div key={label as string} className="showcase-feature"><ItemIcon size={18} /><span>{label as string}</span></div>; })}
+            </div>
           </div>
 
-          <div className="relative z-10 max-w-md py-12">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-black">Campus portal</p>
-            <h2 className="mt-5 text-4xl font-bold leading-[1.08] tracking-[-0.03em] sm:text-5xl">Knowledge. Character. Progress.</h2>
-            <p className="mt-6 max-w-sm text-sm leading-7 text-black">One secure place for the academic life of Regent University College of Science and Technology.</p>
-          </div>
+          <footer className="relative z-10 flex items-center justify-between border-t border-white/10 pt-5 text-xs text-white/50"><span>Regent University College of Science & Technology</span><span className="hidden font-medium sm:block">Established 1986</span></footer>
+        </section>
 
-          <div className="relative z-10 flex items-end justify-between gap-5 border-t border-black/20 pt-5 text-xs text-black">
-            <span>Student information system</span>
-            <span className="text-right uppercase tracking-[0.18em]">RUCST / 01</span>
-          </div>
-        </div>
+        <section className="login-form-panel flex items-center px-5 py-8 sm:px-10 lg:px-14 lg:py-12">
+          <div className="mx-auto w-full max-w-md">
+            <div className="mb-8"><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-[#125b49]"><GraduationCap size={23} /></div><p className="muted-kicker">Student & staff access</p><h2 className="mt-2 text-3xl font-extrabold tracking-[-.045em] text-slate-900 sm:text-[2.15rem]">Welcome back</h2><p className="mt-2 text-sm leading-6 text-slate-500">Sign in to continue to your academic workspace.</p></div>
 
-        <div className="flex items-center bg-[#f7f4ee] p-7 sm:p-10 lg:p-16">
-          <div className="w-full max-w-md">
-            <div className="mb-9">
-              <p className="muted-kicker">Portal access</p>
-              <h3 className="mt-3 text-3xl font-bold tracking-[-0.03em] text-black sm:text-4xl">Welcome back.</h3>
-              <p className="mt-3 text-sm leading-6 text-black">Sign in with your institutional account to continue.</p>
-            </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-black">Student ID or Email</label>
-              <input
-                type="text"
-                value={loginForm.identifier}
-                onChange={(event) => setLoginForm({ ...loginForm, identifier: event.target.value })}
-                className="input-field"
-                placeholder="10290001 or admin@rucst.edu.gh"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-black">Password</label>
-              <PasswordInput
-                value={loginForm.password}
-                onChange={(password) => setLoginForm({ ...loginForm, password })}
-                className="input-field"
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                required
-              />
-            </div>
-
-            <div className="flex justify-end"><Link href="/forgot-password" className="text-sm font-semibold text-black underline-offset-4 hover:underline">Forgot password?</Link></div>
-
-            {error ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-black">{error}</div>
-            ) : null}
-
-            {success ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{success}</div>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="primary-button w-full rounded-md px-5 py-3.5 text-base font-semibold shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
-
-          <div className="mt-8 rounded-2xl border border-[#d9d4ca] bg-white/50 p-4">
-            <h4 className="text-base font-semibold text-black">Create student account</h4>
-            <p className="mt-2 text-sm leading-6 text-black">Enter your full name exactly as it appears on the admitted student list to generate your student ID and create your password.</p>
-
-            <form onSubmit={handleClaimAccount} className="mt-4 space-y-3">
-              <input
-                type="text"
-                value={claimForm.fullName}
-                onChange={(event) => setClaimForm({ ...claimForm, fullName: event.target.value })}
-                className="input-field"
-                placeholder="Full name"
-                required
-              />
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  type="text"
-                  value={claimForm.programme}
-                  onChange={(event) => setClaimForm({ ...claimForm, programme: event.target.value })}
-                  className="input-field"
-                  placeholder="Programme"
-                />
-                <input
-                  type="text"
-                  value={claimForm.department}
-                  onChange={(event) => setClaimForm({ ...claimForm, department: event.target.value })}
-                  className="input-field"
-                  placeholder="Department"
-                />
-              </div>
-
-              <input
-                type="text"
-                value={claimForm.level}
-                onChange={(event) => setClaimForm({ ...claimForm, level: event.target.value })}
-                className="input-field"
-                placeholder="Level"
-              />
-
-              <PasswordInput
-                value={claimForm.password}
-                onChange={(password) => setClaimForm({ ...claimForm, password })}
-                className="input-field"
-                placeholder="Create password"
-                minLength={8}
-                autoComplete="new-password"
-                required
-              />
-
-              <button
-                type="submit"
-                disabled={claiming}
-                className="primary-button w-full rounded-md px-5 py-3.5 text-base font-semibold shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {claiming ? 'Verifying admission...' : 'Generate student ID'}
-              </button>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div><label htmlFor="identifier" className="login-label">Student ID or email</label><input id="identifier" type="text" value={loginForm.identifier} onChange={(event) => setLoginForm({ ...loginForm, identifier: event.target.value })} className="input-field" placeholder="e.g. 10290001" autoComplete="username" required /></div>
+              <div><div className="mb-2 flex items-center justify-between"><label className="login-label mb-0">Password</label><Link href="/forgot-password" className="login-help-link">Forgot password?</Link></div><PasswordInput value={loginForm.password} onChange={(password) => setLoginForm({ ...loginForm, password })} className="input-field" placeholder="Enter your password" autoComplete="current-password" required /></div>
+              {error && <div role="alert" className="login-alert login-alert-error">{error}</div>}
+              {success && <div role="status" className="login-alert login-alert-success">{success}</div>}
+              <button type="submit" disabled={loading} className="primary-button login-submit w-full">{loading ? 'Signing you in...' : <>Sign in <ArrowRight size={18} /></>}</button>
             </form>
+
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <button type="button" onClick={() => setClaimOpen(!claimOpen)} aria-expanded={claimOpen} className="claim-toggle w-full"><span><strong>New student?</strong><small>Claim your portal account</small></span><ChevronDown size={19} className={claimOpen ? 'rotate-180' : ''} /></button>
+              {claimOpen && <form onSubmit={handleClaimAccount} className="claim-form mt-5 space-y-3"><p className="text-sm leading-6 text-slate-500">Use the name exactly as it appears on the admitted student list.</p><input type="text" value={claimForm.fullName} onChange={(event) => setClaimForm({ ...claimForm, fullName: event.target.value })} className="input-field" placeholder="Full name" required /><div className="grid gap-3 sm:grid-cols-2"><input type="text" value={claimForm.programme} onChange={(event) => setClaimForm({ ...claimForm, programme: event.target.value })} className="input-field" placeholder="Programme" /><input type="text" value={claimForm.department} onChange={(event) => setClaimForm({ ...claimForm, department: event.target.value })} className="input-field" placeholder="Department" /></div><input type="text" value={claimForm.level} onChange={(event) => setClaimForm({ ...claimForm, level: event.target.value })} className="input-field" placeholder="Level" /><PasswordInput value={claimForm.password} onChange={(password) => setClaimForm({ ...claimForm, password })} className="input-field" placeholder="Create password (8+ characters)" minLength={8} autoComplete="new-password" required /><button type="submit" disabled={claiming} className="secondary-button w-full">{claiming ? 'Verifying admission...' : 'Generate my student ID'}</button></form>}
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
       </div>
     </main>
   );

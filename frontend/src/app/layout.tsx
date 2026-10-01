@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Manrope, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "Regent University College of Science and Technology Portal",
+  title: "RUCST Academic Portal",
   description: "The academic workspace for Regent University College of Science and Technology students and staff",
 };
 
@@ -22,7 +11,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${manrope.variable} ${geistMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
