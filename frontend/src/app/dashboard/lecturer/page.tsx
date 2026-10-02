@@ -2,12 +2,17 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, BookOpen, CalendarCheck2, ClipboardList, Users } from 'lucide-react';
+import {
+  ArrowUpRight, BookOpen, CalendarCheck2, ClipboardList,
+  Users, GraduationCap,
+} from 'lucide-react';
 import NotificationsPanel from '@/components/NotificationsPanel';
+import { API_BASE } from '@/lib/config';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 type Course = { _id: string; code: string; title: string; credits: number; semester: string };
 type Attendance = { _id: string; percentage: number; studentId?: { fullName?: string }; courseId?: { code?: string } };
+
+const COURSE_TONES = ['crimson', 'navy', 'forest', 'amber'] as const;
 
 export default function LecturerDashboardPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -18,40 +23,157 @@ export default function LecturerDashboardPage() {
   useEffect(() => {
     async function loadDashboard() {
       const headers = { Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` };
-      const [coursesResponse, attendanceResponse] = await Promise.all([
+      const [coursesRes, attendanceRes] = await Promise.all([
         fetch(`${API_BASE}/portal/courses`, { credentials: 'include', headers }),
         fetch(`${API_BASE}/portal/attendance`, { credentials: 'include', headers }),
       ]);
-      if (!coursesResponse.ok || !attendanceResponse.ok) throw new Error('Unable to load teaching workspace');
-      setCourses((await coursesResponse.json()).courses || []);
-      setAttendance((await attendanceResponse.json()).attendance || []);
+      if (!coursesRes.ok || !attendanceRes.ok) throw new Error('Unable to load teaching workspace');
+      setCourses((await coursesRes.json()).courses || []);
+      setAttendance((await attendanceRes.json()).attendance || []);
       setLoading(false);
     }
-    loadDashboard().catch((reason) => { setError(reason instanceof Error ? reason.message : 'Unable to load teaching workspace'); setLoading(false); });
+    loadDashboard().catch((reason) => {
+      setError(reason instanceof Error ? reason.message : 'Unable to load teaching workspace');
+      setLoading(false);
+    });
   }, []);
 
-  const averageAttendance = attendance.length ? Math.round(attendance.reduce((sum, row) => sum + Number(row.percentage || 0), 0) / attendance.length) : 0;
+  const averageAttendance = attendance.length
+    ? Math.round(attendance.reduce((sum, row) => sum + Number(row.percentage || 0), 0) / attendance.length)
+    : 0;
+
+  const stats = [
+    { label: 'Assigned courses', value: loading ? '—' : courses.length, icon: BookOpen, tone: 'crimson', live: true },
+    { label: 'Attendance entries', value: loading ? '—' : attendance.length, icon: ClipboardList, tone: 'gold', live: true },
+    { label: 'Average attendance', value: loading ? '—' : `${averageAttendance}%`, icon: Users, tone: 'green', live: false },
+  ];
 
   return (
-    <div className="dashboard-page space-y-6">
-      {loading && <div className="rounded-2xl bg-[#e5f1ed] p-4 text-sm font-semibold text-[#0d5a4d]">Loading your teaching workspace...</div>}
-      {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-      <div className="relative overflow-hidden rounded-[28px] bg-[#0d5a4d] p-6 text-white sm:p-8">
-        <div className="absolute -right-10 -top-20 h-64 w-64 rounded-full border-[30px] border-[#d6b46a]/20" />
-        <p className="relative text-xs uppercase tracking-[0.2em] text-[#dfece7]">Lecturer workspace / 01</p>
-        <h2 className="relative mt-3 max-w-xl text-3xl font-bold tracking-tight sm:text-4xl">Make every class count.</h2>
-        <p className="relative mt-3 max-w-lg text-sm leading-6 text-[#dfece7]">Keep your teaching load, attendance records, and course activity in one calm working view.</p>
-        <div className="relative mt-6 flex flex-wrap gap-3"><Link href="/dashboard/lecturer/courses" className="flex items-center gap-2 rounded-xl bg-[#f4efe7] px-4 py-3 text-sm font-bold text-[#123d35]">View courses <ArrowUpRight size={16} /></Link><Link href="/dashboard/lecturer/attendance" className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white ring-1 ring-white/20">Record attendance <CalendarCheck2 size={16} /></Link></div>
+    <div className="pg-page">
+      {/* ── Hero ── */}
+      <div className="pg-hero">
+        <div className="pg-hero-orb pg-hero-orb-1" />
+        <div className="pg-hero-orb pg-hero-orb-2" />
+        <p className="pg-hero-eyebrow">Lecturer workspace</p>
+        <h2>Make every class count.</h2>
+        <p>Keep your teaching load, attendance records, and course activity in one calm working view.</p>
+        <div className="pg-hero-actions">
+          <Link href="/dashboard/lecturer/courses" className="pg-hero-btn-primary">
+            View courses <ArrowUpRight size={16} />
+          </Link>
+          <Link href="/dashboard/lecturer/attendance" className="pg-hero-btn-ghost">
+            Record attendance <CalendarCheck2 size={16} />
+          </Link>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {[{ label: 'Assigned courses', value: courses.length, icon: BookOpen, tone: 'bg-[#e6f1e9] text-[#0d5a4d]' }, { label: 'Attendance entries', value: attendance.length, icon: ClipboardList, tone: 'bg-[#f6eddb] text-[#8a6a2f]' }, { label: 'Average attendance', value: `${averageAttendance}%`, icon: Users, tone: 'bg-[#e9eef1] text-[#38576a]' }].map((metric) => <div key={metric.label} className="rounded-[24px] bg-[#f8fafc] p-5 ring-1 ring-slate-200"><div className="flex items-start justify-between"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${metric.tone}`}><metric.icon size={19} /></div><span className="text-xs font-semibold text-[#8a9899]">LIVE</span></div><div className="mt-5 text-3xl font-bold tracking-tight text-[#11222d]">{metric.value}</div><div className="mt-1 text-sm text-slate-500">{metric.label}</div></div>)}
+      {error && (
+        <div className="pg-alert pg-alert-error">{error}</div>
+      )}
+
+      {/* ── Stats ── */}
+      <div className="pg-stats" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        {stats.map((s) => (
+          <div key={s.label} className="pg-stat">
+            <div className="pg-stat-top">
+              <div className={`pg-stat-icon ${s.tone}`}><s.icon size={20} /></div>
+              {s.live && <span className="pg-stat-live">Live</span>}
+            </div>
+            <div>
+              <div className="pg-stat-value">{s.value}</div>
+              <div className="pg-stat-label">{s.label}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#718183]">Teaching load</p><h3 className="mt-2 text-xl font-bold text-[#11222d]">Your active courses</h3></div><BookOpen className="text-[#0d5a4d]" size={22} /></div><div className="mt-5 space-y-3">{courses.slice(0, 4).map((course) => <div key={course._id} className="flex items-center justify-between rounded-2xl bg-white p-4 ring-1 ring-slate-200"><div><div className="font-bold text-[#11222d]">{course.code}</div><div className="mt-1 text-sm text-slate-500">{course.title}</div></div><span className="rounded-full bg-[#e6f1e9] px-3 py-1 text-xs font-bold text-[#0d5a4d]">{course.credits} credits</span></div>)}{courses.length === 0 && <p className="text-sm text-slate-500">No courses have been assigned yet.</p>}</div></div>
-        <div className="rounded-[28px] bg-[#17252b] p-6 text-white"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b9d6c4]">Quick note</p><h3 className="mt-3 text-2xl font-bold">Attendance deserves a rhythm.</h3><p className="mt-3 text-sm leading-6 text-[#bfd0cb]">Keep records close to the classroom. A timely update gives students a clearer picture of their progress.</p><Link href="/dashboard/lecturer/attendance" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-[#d6b46a]">Open attendance register <ArrowUpRight size={16} /></Link></div>
+      {/* ── Two-column section ── */}
+      <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+        {/* Course list */}
+        <div className="pg-card">
+          <div style={{ padding: '22px 24px', borderBottom: '1px solid #f5f0eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p className="pg-eyebrow">Teaching load</p>
+              <h3 style={{ margin: '6px 0 0', fontFamily: 'Georgia, serif', fontSize: 20, letterSpacing: '-.03em', color: '#11222d' }}>
+                Your active courses
+              </h3>
+            </div>
+            <div style={{ display: 'grid', width: 38, height: 38, placeItems: 'center', borderRadius: 10, background: '#fde8ea', color: '#a51c30' }}>
+              <BookOpen size={19} />
+            </div>
+          </div>
+          {loading ? (
+            <div style={{ padding: 24, display: 'grid', gap: 12 }}>
+              {[1, 2, 3].map(i => <div key={i} className="pg-shimmer" style={{ height: 56 }} />)}
+            </div>
+          ) : courses.length === 0 ? (
+            <div className="pg-empty">
+              <GraduationCap size={36} />
+              <p>No courses have been assigned yet.</p>
+            </div>
+          ) : (
+            <div>
+              {courses.slice(0, 5).map((course, idx) => (
+                <div key={course._id} className="pg-row">
+                  <div className="pg-row-left">
+                    <div className={`pg-row-icon course-art ${COURSE_TONES[idx % COURSE_TONES.length]}`} style={{ color: 'white', width: 40, height: 40 }}>
+                      <BookOpen size={16} />
+                    </div>
+                    <div>
+                      <div className="pg-row-title">{course.code}</div>
+                      <div className="pg-row-sub">{course.title}</div>
+                    </div>
+                  </div>
+                  <span className="pg-badge pg-badge-crimson">{course.credits} cr</span>
+                </div>
+              ))}
+              {courses.length > 5 && (
+                <div style={{ padding: '12px 20px', borderTop: '1px solid #f5f0eb' }}>
+                  <Link href="/dashboard/lecturer/courses" className="pg-section-link">
+                    View all {courses.length} courses <ArrowUpRight size={14} />
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Quick note + attendance link */}
+        <div style={{ display: 'grid', gap: 16, gridAutoRows: 'min-content' }}>
+          <div className="pg-card" style={{ background: 'linear-gradient(135deg, #11222d 0%, #1e3a5f 100%)', border: 'none', color: '#fff' }}>
+            <div style={{ padding: '28px 28px 24px' }}>
+              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)', margin: '0 0 12px' }}>
+                Quick note
+              </p>
+              <h3 style={{ margin: '0 0 10px', fontFamily: 'Georgia, serif', fontSize: 20, letterSpacing: '-.03em' }}>
+                Attendance deserves a rhythm.
+              </h3>
+              <p style={{ margin: '0 0 22px', fontSize: 13.5, lineHeight: 1.65, color: 'rgba(255,255,255,.68)' }}>
+                A timely update gives students a clearer picture of their progress.
+              </p>
+              <Link href="/dashboard/lecturer/attendance" className="pg-hero-btn-primary" style={{ fontSize: 13 }}>
+                Open attendance register <ArrowUpRight size={15} />
+              </Link>
+            </div>
+          </div>
+
+          {/* Results shortcut */}
+          <div className="pg-card" style={{ padding: '22px 24px', display: 'flex', alignItems: 'center', gap: 18 }}>
+            <div style={{ display: 'grid', width: 52, height: 52, placeItems: 'center', borderRadius: 14, background: '#fdf3dc', color: '#8a6a2f', flexShrink: 0 }}>
+              <GraduationCap size={22} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.1em' }}>Results</p>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#11222d' }}>Publish student grades</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Upload and review results</div>
+            </div>
+            <Link href="/dashboard/lecturer/results" style={{ display: 'grid', width: 34, height: 34, placeItems: 'center', borderRadius: 8, background: '#fde8ea', color: '#a51c30', flexShrink: 0 }}>
+              <ArrowUpRight size={16} />
+            </Link>
+          </div>
+        </div>
       </div>
+
       <NotificationsPanel title="Teaching updates" />
     </div>
   );

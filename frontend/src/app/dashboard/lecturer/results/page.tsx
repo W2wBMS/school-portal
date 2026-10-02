@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import ResultApprovalStatus from '@/components/ResultApprovalStatus';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 type Course = { _id: string; code: string; title: string; semester: string };
 type Student = { _id: string; fullName: string; studentId?: string; email: string; level?: string };
 type RosterEntry = { student: Student };

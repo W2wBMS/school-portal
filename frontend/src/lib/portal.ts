@@ -23,7 +23,7 @@ export type AttendanceRow = { percentage: number; courseId?: { code?: string; ti
 export type FeeLedgerRow = { invoiceNumber: string; amountDue: number; amountPaid: number; balance: number; status: string; semester: string };
 export type AcademicSummary = { totalCredits: number; cgpa: number; semesters: Array<{ semester: string; level?: string; academicYear?: string; credits: number; gpa: number; results: ResultRow[] }> };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:5000/api');
+import { API_BASE } from '@/lib/config';
 
 export async function fetchStudentOverview() {
   const token = localStorage.getItem('portal_token') || '';

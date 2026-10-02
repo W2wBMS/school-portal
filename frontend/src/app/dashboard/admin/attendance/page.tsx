@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 
 export default function AdminAttendancePage() {
   const [attendance, setAttendance] = useState<any[]>([]);

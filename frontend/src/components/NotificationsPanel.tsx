@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 type NotificationItem = { _id: string; title: string; message: string; readAt?: string; createdAt?: string };
 
 export default function NotificationsPanel({ title = 'Notifications' }: { title?: string }) {

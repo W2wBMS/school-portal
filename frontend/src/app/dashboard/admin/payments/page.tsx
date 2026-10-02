@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 
 type PaymentRow = {
   _id: string;
@@ -83,66 +83,146 @@ export default function AdminPaymentsPage() {
   }), [payments, filter, query]);
 
   return (
-    <div className="space-y-6 rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="muted-kicker">Finance operations</p>
-          <h2 className="mt-2 text-2xl font-bold text-[#11222d]">Payment verification</h2>
-          <p className="mt-2 text-sm text-slate-500">Review submitted transaction references before applying funds to invoices.</p>
+    <div className="pg-page">
+      {/* ── Main card ── */}
+      <div className="pg-card">
+        <div style={{ padding: '22px 28px', borderBottom: '1px solid #f0ebe4', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <p className="pg-eyebrow">Finance operations</p>
+            <h1 className="pg-page-title" style={{ marginTop: 6 }}>Payment verification</h1>
+            <p className="pg-page-subtitle">Review submitted transaction references before applying funds to invoices.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fdf3dc', borderRadius: 12, padding: '10px 18px' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#8a6a2f', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Awaiting review</span>
+            <strong style={{ fontSize: 22, fontWeight: 900, color: '#8a6a2f' }}>{pendingCount}</strong>
+          </div>
         </div>
-        <div className="rounded-xl bg-[#fff8e9] px-4 py-3"><span className="text-xs text-[#8a6a2f]">Awaiting review</span><strong className="ml-3 text-xl text-[#8a6a2f]">{pendingCount}</strong></div>
-      </header>
 
-      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
+        {error && (
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0ebe4' }}>
+            <div className="pg-alert pg-alert-error">{error}</div>
+          </div>
+        )}
+        {message && (
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0ebe4' }}>
+            <div className="pg-alert pg-alert-success">{message}</div>
+          </div>
+        )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter payments by status">
-          {['pending', 'successful', 'failed', 'all'].map((status) => (
-            <button key={status} onClick={() => setFilter(status)} aria-pressed={filter === status} className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize ${filter === status ? 'bg-[#0d5a4d] text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200'}`}>
-              {status === 'pending' ? `Pending (${pendingCount})` : status === 'successful' ? 'Verified' : status === 'failed' ? 'Rejected' : 'All'}
-            </button>
-          ))}
+        {/* ── Filter bar ── */}
+        <div style={{ padding: '14px 24px', borderBottom: '1px solid #f0ebe4', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} role="group" aria-label="Filter payments by status">
+            {['pending', 'successful', 'failed', 'all'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilter(status)}
+                aria-pressed={filter === status}
+                className={`pg-btn pg-btn-sm ${filter === status ? 'pg-btn-primary' : 'pg-btn-ghost'}`}
+                style={{ textTransform: 'capitalize' }}
+              >
+                {status === 'pending' ? `Pending (${pendingCount})` : status === 'successful' ? 'Verified' : status === 'failed' ? 'Rejected' : 'All'}
+              </button>
+            ))}
+          </div>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search student, invoice or reference…"
+            className="pg-input"
+            style={{ maxWidth: 320 }}
+          />
         </div>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search student, invoice or reference" className="input-field w-full sm:max-w-sm" />
-      </div>
 
-      <section className="space-y-3" aria-label="Payment submissions">
-        {loading ? <p className="rounded-xl bg-white p-5 text-sm text-slate-500">Loading submissions...</p> : visiblePayments.length === 0 ? <p className="rounded-xl bg-white p-5 text-sm text-slate-500">No payment submissions match this view.</p> : visiblePayments.map((payment) => (
-          <article key={payment._id} className="rounded-xl bg-white p-5 ring-1 ring-slate-200">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-[#11222d]">{payment.studentId?.fullName || 'Student'}</h3><span className="rounded-full bg-[#f1f5f3] px-2 py-1 text-xs text-slate-600">{payment.studentId?.studentId || 'No student ID'}</span></div>
-                <p className="mt-1 text-sm text-slate-500">{payment.studentId?.email || ''}</p>
-              </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${payment.status === 'successful' ? 'bg-emerald-50 text-emerald-700' : payment.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{payment.status === 'successful' ? 'Verified' : payment.status === 'failed' ? 'Rejected' : 'Pending review'}</span>
+        {/* ── Payment rows ── */}
+        <section aria-label="Payment submissions">
+          {loading ? (
+            <div style={{ padding: 24, display: 'grid', gap: 12 }}>
+              {[1, 2, 3].map(i => <div key={i} className="pg-shimmer" style={{ height: 120 }} />)}
             </div>
+          ) : visiblePayments.length === 0 ? (
+            <div className="pg-empty">
+              <span style={{ fontSize: 36, opacity: 0.3 }}>₵</span>
+              <p>No payment submissions match this view.</p>
+            </div>
+          ) : visiblePayments.map((payment) => {
+            const statusBadge =
+              payment.status === 'successful' ? 'pg-badge-green' :
+              payment.status === 'pending' ? 'pg-badge-amber' : 'pg-badge-red';
+            const statusLabel =
+              payment.status === 'successful' ? 'Verified' :
+              payment.status === 'failed' ? 'Rejected' : 'Pending review';
+            return (
+              <article key={payment._id} style={{ padding: '20px 28px', borderBottom: '1px solid #f5f0eb' }}>
+                {/* Student header */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div className="user-avatar" style={{ flexShrink: 0 }}>
+                      {(payment.studentId?.fullName || 'S').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: '#11222d' }}>{payment.studentId?.fullName || 'Student'}</span>
+                        <span className="pg-badge pg-badge-slate" style={{ fontSize: 11 }}>{payment.studentId?.studentId || 'No ID'}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{payment.studentId?.email || ''}</div>
+                    </div>
+                  </div>
+                  <span className={`pg-badge ${statusBadge}`}>{statusLabel}</span>
+                </div>
 
-            <dl className="mt-4 grid gap-x-6 gap-y-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div><dt className="text-xs text-slate-500">Invoice</dt><dd className="mt-1 font-semibold text-[#11222d]">{payment.feeLedgerId?.invoiceNumber || 'Legacy payment'}</dd><dd className="text-xs text-slate-500">{payment.feeLedgerId?.semester || ''}</dd></div>
-              <div><dt className="text-xs text-slate-500">Amount</dt><dd className="mt-1 font-bold text-[#0d5a4d]">GH¢ {Number(payment.amount).toFixed(2)}</dd></div>
-              <div><dt className="text-xs text-slate-500">Payment method</dt><dd className="mt-1 capitalize text-[#11222d]">{payment.paymentMethod?.replace('_', ' ') || 'Not recorded'}</dd></div>
-              <div><dt className="text-xs text-slate-500">Submitted</dt><dd className="mt-1 text-[#11222d]">{new Date(payment.createdAt).toLocaleString()}</dd></div>
-              <div><dt className="text-xs text-slate-500">Student transaction / receipt reference</dt><dd className="mt-1 break-all font-semibold text-[#11222d]">{payment.studentReference || 'Not provided'}</dd></div>
-              <div><dt className="text-xs text-slate-500">Portal reference</dt><dd className="mt-1 break-all text-[#11222d]">{payment.reference}</dd></div>
-              {payment.verificationNote && <div className="sm:col-span-2"><dt className="text-xs text-slate-500">Staff note</dt><dd className="mt-1 text-[#11222d]">{payment.verificationNote}</dd></div>}
-            </dl>
+                {/* Detail grid */}
+                <div style={{ display: 'grid', gap: '8px 24px', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', padding: '14px 0', borderTop: '1px solid #f5f0eb', borderBottom: payment.status === 'pending' ? '1px solid #f5f0eb' : 'none', marginBottom: payment.status === 'pending' ? 14 : 0 }}>
+                  <div><div className="pg-label" style={{ marginBottom: 2 }}>Invoice</div><div style={{ fontSize: 13, fontWeight: 700, color: '#11222d' }}>{payment.feeLedgerId?.invoiceNumber || 'Legacy payment'}</div><div style={{ fontSize: 11, color: '#64748b' }}>{payment.feeLedgerId?.semester || ''}</div></div>
+                  <div><div className="pg-label" style={{ marginBottom: 2 }}>Amount</div><div style={{ fontSize: 15, fontWeight: 900, color: '#15803d' }}>GH¢ {Number(payment.amount).toFixed(2)}</div></div>
+                  <div><div className="pg-label" style={{ marginBottom: 2 }}>Method</div><div style={{ fontSize: 13, color: '#11222d', textTransform: 'capitalize' }}>{payment.paymentMethod?.replace('_', ' ') || 'Not recorded'}</div></div>
+                  <div><div className="pg-label" style={{ marginBottom: 2 }}>Submitted</div><div style={{ fontSize: 12, color: '#11222d' }}>{new Date(payment.createdAt).toLocaleString()}</div></div>
+                  <div><div className="pg-label" style={{ marginBottom: 2 }}>Student reference</div><div style={{ fontSize: 12, fontWeight: 700, color: '#11222d', wordBreak: 'break-all' }}>{payment.studentReference || 'Not provided'}</div></div>
+                  <div><div className="pg-label" style={{ marginBottom: 2 }}>Portal reference</div><div style={{ fontSize: 12, color: '#64748b', wordBreak: 'break-all' }}>{payment.reference}</div></div>
+                  {payment.verificationNote && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div className="pg-label" style={{ marginBottom: 2 }}>Staff note</div>
+                      <div style={{ fontSize: 13, color: '#475569', padding: '8px 12px', background: '#faf8f5', borderRadius: 8, borderLeft: '3px solid #a51c30' }}>{payment.verificationNote}</div>
+                    </div>
+                  )}
+                </div>
 
-            {payment.status === 'pending' && (
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-                <button disabled={busyReference === payment.reference} onClick={() => reviewPayment(payment.reference, 'approve')} className="rounded-lg bg-[#0d5a4d] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Verify and apply</button>
-                {rejectingReference === payment.reference ? (
-                  <form onSubmit={(event) => { event.preventDefault(); reviewPayment(payment.reference, 'reject', rejectionNote); }} className="flex w-full flex-col gap-2 sm:flex-row">
-                    <input required maxLength={500} value={rejectionNote} onChange={(event) => setRejectionNote(event.target.value)} placeholder="Reason for rejecting" className="input-field min-w-0 flex-1" />
-                    <button disabled={busyReference === payment.reference} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700">Confirm rejection</button>
-                    <button type="button" onClick={() => { setRejectingReference(''); setRejectionNote(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
-                  </form>
-                ) : <button onClick={() => setRejectingReference(payment.reference)} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700">Reject</button>}
-              </div>
-            )}
-          </article>
-        ))}
-      </section>
+                {/* Actions */}
+                {payment.status === 'pending' && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                    <button
+                      disabled={busyReference === payment.reference}
+                      onClick={() => reviewPayment(payment.reference, 'approve')}
+                      className="pg-btn pg-btn-primary hover-lift"
+                    >
+                      Verify & apply
+                    </button>
+                    {rejectingReference === payment.reference ? (
+                      <form
+                        onSubmit={(event) => { event.preventDefault(); reviewPayment(payment.reference, 'reject', rejectionNote); }}
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 8, flex: 1 }}
+                      >
+                        <input
+                          required
+                          maxLength={500}
+                          value={rejectionNote}
+                          onChange={(event) => setRejectionNote(event.target.value)}
+                          placeholder="Reason for rejecting…"
+                          className="pg-input"
+                          style={{ flex: 1, minWidth: 200 }}
+                        />
+                        <button disabled={busyReference === payment.reference} className="pg-btn pg-btn-danger">Confirm rejection</button>
+                        <button type="button" onClick={() => { setRejectingReference(''); setRejectionNote(''); }} className="pg-btn pg-btn-ghost">Cancel</button>
+                      </form>
+                    ) : (
+                      <button onClick={() => setRejectingReference(payment.reference)} className="pg-btn pg-btn-danger">Reject</button>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </section>
+      </div>
     </div>
   );
-}
+}

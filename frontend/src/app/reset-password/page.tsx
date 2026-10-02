@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { fetchCsrfToken } from '@/lib/csrf';
 import PasswordInput from '@/components/PasswordInput';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState('');

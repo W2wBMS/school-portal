@@ -3,13 +3,27 @@ const express = require('express');
 const User = require('../models/User');
 const StudentProfile = require('../models/StudentProfile');
 const AdmissionList = require('../models/AdmissionList');
-const { protect, authorize } = require('../middleware/auth');
+const AuditLog = require('../models/AuditLog');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
 const { audit } = require('../utils/audit');
 const { sendPasswordResetEmail } = require('../utils/mail');
 const { parseAdmissionsCsv } = require('../utils/admissions');
 const { z } = require('zod');
 
 const router = express.Router();
+const BASIC_ACCOUNT_ROLES = ['student', 'lecturer'];
+const PRIVILEGED_CREATOR_ROLES = ['system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'];
+const ALL_ACCOUNT_ROLES = [...BASIC_ACCOUNT_ROLES, 'department_admin', 'academic_officer', 'finance_officer', 'student_affairs', ...PRIVILEGED_CREATOR_ROLES];
+const createUserSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(160),
+  password: z.string().min(8).max(128),
+  role: z.enum(ALL_ACCOUNT_ROLES).default('student'),
+}).strict();
+
+function canCreatePrivilegedUsers(role) {
+  return PRIVILEGED_CREATOR_ROLES.includes(role);
+}
 
 function parseCsvLine(line) {
   const values = [];
@@ -54,25 +68,51 @@ router.get('/', protect, authorize('student_affairs', 'department_admin', 'acade
   return res.json({ users });
 });
 
+router.get('/audit-logs', protect, authorizePermission('audit.view'), async (req, res) => {
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100);
+  const filter = {};
+  if (typeof req.query.entity === 'string' && req.query.entity.trim()) filter.entity = req.query.entity.trim();
+  if (typeof req.query.action === 'string' && req.query.action.trim()) filter.action = { $regex: req.query.action.trim(), $options: 'i' };
+  const logs = await AuditLog.aggregate([
+    { $match: filter },
+    { $lookup: { from: 'users', localField: 'actorId', foreignField: '_id', as: 'actor' } },
+    { $unwind: '$actor' },
+    { $match: { 'actor.role': { $ne: 'student' } } },
+    { $sort: { createdAt: -1 } },
+    { $limit: limit },
+    { $project: { action: 1, entity: 1, entityId: 1, metadata: 1, createdAt: 1, actorId: { fullName: '$actor.fullName', email: '$actor.email', role: '$actor.role' } } },
+  ]);
+  return res.json({ logs });
+});
+
 router.post('/', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
-  const allowedRoles = ['student', 'lecturer'];
-  const requestedRole = req.body.role || 'student';
-  if (!allowedRoles.includes(requestedRole) && !['system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'].includes(req.user.role)) {
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Enter a valid name, email, and password of at least 8 characters.' });
+  const { role: requestedRole, ...details } = parsed.data;
+  if (!BASIC_ACCOUNT_ROLES.includes(requestedRole) && !canCreatePrivilegedUsers(req.user.role)) {
     return res.status(403).json({ message: 'Only system administrators can create privileged users' });
   }
-  const user = await User.create({ ...req.body, role: requestedRole });
-  if (requestedRole === 'student') {
-    await StudentProfile.create({
-      userId: user._id,
-      studentId: user.studentId,
-      fullName: user.fullName,
-      email: user.email,
-      programme: user.programme || undefined,
-      department: user.department || undefined,
-      level: user.level || undefined,
-    });
+  try {
+    const user = await User.create({ ...details, role: requestedRole });
+    try {
+      if (requestedRole === 'student') {
+        await StudentProfile.create({ userId: user._id, studentId: user.studentId, fullName: user.fullName, email: user.email });
+      }
+    } catch (error) {
+      await User.findByIdAndDelete(user._id);
+      throw error;
+    }
+    await audit({ actorId: req.user._id, action: 'user.created', entity: 'User', entityId: user._id, after: user.toPublicJSON() });
+    return res.status(201).json({ user: user.toPublicJSON() });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ message: 'An account already exists with this email or student ID.' });
+    throw error;
   }
-  return res.status(201).json({ user: user.toPublicJSON() });
+});
+
+router.get('/admissions', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
+  const admissionList = await AdmissionList.findOne({ key: 'active' }).lean();
+  return res.json({ records: admissionList?.records || [], importedAt: admissionList?.importedAt || null });
 });
 
 router.post('/admissions/import', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {
@@ -192,6 +232,9 @@ router.post('/lecturers/import', protect, authorize('department_admin', 'academi
 router.patch('/:id', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin'), async (req, res) => {
   const updates = { ...req.body };
   delete updates.password;
+  if (updates.role && (!ALL_ACCOUNT_ROLES.includes(updates.role) || (!BASIC_ACCOUNT_ROLES.includes(updates.role) && !canCreatePrivilegedUsers(req.user.role)))) {
+    return res.status(403).json({ message: 'Only system administrators can assign privileged roles' });
+  }
   const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).select('-password');
   if (!user) return res.status(404).json({ message: 'User not found' });
   return res.json({ user });

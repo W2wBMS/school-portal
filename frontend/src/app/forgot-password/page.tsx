@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { fetchCsrfToken } from '@/lib/csrf';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');

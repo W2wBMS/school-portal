@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle, CircleDollarSign, Clock } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 
 type Fee = {
   _id: string;
@@ -154,97 +155,186 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div className="space-y-6 rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="muted-kicker">Finance</p>
-          <h2 className="mt-2 text-2xl font-bold text-[#11222d]">Fees and payments</h2>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500">Report a payment you have already made and follow its staff verification status.</p>
+    <div className="pg-page">
+      {/* ── Stats ── */}
+      <div className="pg-stats" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        <div className="pg-stat hover-lift">
+          <div className="pg-stat-top"><div className="pg-stat-icon green"><CircleDollarSign size={20} /></div></div>
+          <div>
+            <div className="pg-stat-value" style={{ color: '#15803d' }}>GH¢ {totalPaid.toFixed(2)}</div>
+            <div className="pg-stat-label">Total fees paid</div>
+          </div>
         </div>
-        <a href="/dashboard/student/fees" className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#11222d]">Open fee statement</a>
-      </header>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200"><span className="text-sm text-slate-500">Total fees paid</span><strong className="mt-1 block text-xl text-[#0d5a4d]">GH¢ {totalPaid.toFixed(2)}</strong></div>
-        <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200"><span className="text-sm text-slate-500">Outstanding balance</span><strong className="mt-1 block text-xl text-[#8a6a2f]">GH¢ {outstanding.toFixed(2)}</strong></div>
-        <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200"><span className="text-sm text-slate-500">Awaiting review</span><strong className="mt-1 block text-xl text-[#38576a]">{payments.filter((item) => item.status === 'pending').length}</strong></div>
+        <div className="pg-stat hover-lift">
+          <div className="pg-stat-top"><div className="pg-stat-icon gold"><CircleDollarSign size={20} /></div></div>
+          <div>
+            <div className="pg-stat-value" style={{ color: '#8a6a2f' }}>GH¢ {outstanding.toFixed(2)}</div>
+            <div className="pg-stat-label">Outstanding balance</div>
+          </div>
+        </div>
+        <div className="pg-stat hover-lift">
+          <div className="pg-stat-top"><div className="pg-stat-icon crimson"><Clock size={20} /></div></div>
+          <div>
+            <div className="pg-stat-value">{payments.filter((item) => item.status === 'pending').length}</div>
+            <div className="pg-stat-label">Awaiting review</div>
+          </div>
+        </div>
       </div>
 
-      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
+      {/* ── Main card ── */}
+      <div className="pg-card">
+        <div style={{ padding: '22px 28px', borderBottom: '1px solid #f0ebe4', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <p className="pg-eyebrow">Finance</p>
+            <h1 className="pg-page-title" style={{ marginTop: 6 }}>Fees and payments</h1>
+            <p className="pg-page-subtitle">Report a payment you have already made and track its staff verification status.</p>
+          </div>
+          <a href="/dashboard/student/fees" className="pg-btn pg-btn-outline" style={{ textDecoration: 'none' }}>Open fee statement</a>
+        </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-          <h3 className="text-lg font-bold text-[#11222d]">Report a payment</h3>
-          <p className="mt-1 text-sm text-slate-500">Submit only after paying through an approved university channel. Finance staff will verify the transaction reference.</p>
-          <form onSubmit={submitPayment} className="mt-5 space-y-4">
-            <div>
-              <label htmlFor="invoice" className="mb-1 block text-sm font-medium text-slate-700">Invoice</label>
-              <select id="invoice" required value={selectedFeeId} onChange={(event) => selectInvoice(event.target.value)} className="input-field w-full">
-                <option value="">Select an outstanding invoice</option>
-                {fees.filter((fee) => Number(fee.balance) > 0).map((fee) => <option key={fee._id} value={fee._id}>{fee.invoiceNumber} · {fee.semester} · GH¢ {Number(fee.balance).toFixed(2)} due</option>)}
-              </select>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+        {error && (
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0ebe4' }}>
+            <div className="pg-alert pg-alert-error"><AlertCircle size={15} style={{ flexShrink: 0 }} />{error}</div>
+          </div>
+        )}
+        {message && (
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0ebe4' }}>
+            <div className="pg-alert pg-alert-success"><CheckCircle size={15} style={{ flexShrink: 0 }} />{message}</div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gap: 0 }}>
+          {/* ── Report form ── */}
+          <div style={{ padding: '24px 28px', borderBottom: '1px solid #f0ebe4' }}>
+            <p className="pg-eyebrow" style={{ marginBottom: 6 }}>Submit a payment</p>
+            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
+              Submit only after paying through an approved university channel. Finance staff will verify the transaction reference.
+            </p>
+            <form onSubmit={submitPayment} style={{ display: 'grid', gap: 16 }}>
               <div>
-                <label htmlFor="amount" className="mb-1 block text-sm font-medium text-slate-700">Amount (GH¢)</label>
-                <input id="amount" required min="0.01" max={selectedFee?.balance} step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} className="input-field w-full" />
-              </div>
-              <div>
-                <label htmlFor="method" className="mb-1 block text-sm font-medium text-slate-700">Payment method</label>
-                <select id="method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="input-field w-full">
-                  <option value="bank_transfer">Bank transfer</option>
-                  <option value="mobile_money">Mobile money</option>
-                  <option value="cash">Cash at finance office</option>
+                <label htmlFor="invoice" className="pg-label">Invoice</label>
+                <select id="invoice" required value={selectedFeeId} onChange={(event) => selectInvoice(event.target.value)} className="pg-select">
+                  <option value="">Select an outstanding invoice</option>
+                  {fees.filter((fee) => Number(fee.balance) > 0).map((fee) => (
+                    <option key={fee._id} value={fee._id}>{fee.invoiceNumber} · {fee.semester} · GH¢ {Number(fee.balance).toFixed(2)} due</option>
+                  ))}
                 </select>
               </div>
-            </div>
-            <div>
-              <label htmlFor="transaction-reference" className="mb-1 block text-sm font-medium text-slate-700">Bank / transaction / receipt reference</label>
-              <input id="transaction-reference" required maxLength={100} value={studentReference} onChange={(event) => setStudentReference(event.target.value)} placeholder="Reference shown on your receipt" className="input-field w-full" />
-            </div>
-            {selectedFee && <p className="rounded-lg bg-[#f5faf7] px-3 py-2 text-sm text-[#38576a]">Remaining on this invoice: GH¢ {Number(selectedFee.balance).toFixed(2)}</p>}
-            <button disabled={submitting || !selectedFee} className="w-full rounded-lg bg-[#0d5a4d] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{submitting ? 'Submitting...' : 'Submit for verification'}</button>
-          </form>
-        </section>
-
-        <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-[#11222d]">Payment history</h3>
-            <form onSubmit={checkStatus} className="flex gap-2">
-              <input required aria-label="Portal payment reference" value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Portal reference" className="input-field min-w-0" />
-              <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-[#11222d]">Check</button>
+              <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                <div>
+                  <label htmlFor="amount" className="pg-label">Amount (GH¢)</label>
+                  <input id="amount" required min="0.01" max={selectedFee?.balance} step="0.01" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} className="pg-input" />
+                </div>
+                <div>
+                  <label htmlFor="method" className="pg-label">Payment method</label>
+                  <select id="method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="pg-select">
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="mobile_money">Mobile money (MTN / Telecel)</option>
+                    <option value="cash">Cash at finance office</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="transaction-reference" className="pg-label">Bank / Transaction / Receipt reference</label>
+                <input id="transaction-reference" required maxLength={100} value={studentReference} onChange={(event) => setStudentReference(event.target.value)} placeholder="Reference shown on your receipt or bank confirmation" className="pg-input" />
+              </div>
+              {selectedFee && (
+                <div className="pg-alert pg-alert-info" style={{ fontSize: 12 }}>
+                  Remaining balance on this invoice: <strong>GH¢ {Number(selectedFee.balance).toFixed(2)}</strong>
+                </div>
+              )}
+              <div>
+                <button disabled={submitting || !selectedFee} className="pg-btn pg-btn-primary hover-lift" style={{ minWidth: 200 }}>
+                  {submitting ? 'Submitting...' : 'Submit for verification'}
+                </button>
+              </div>
             </form>
           </div>
-          <div className="mt-4 space-y-3">
-            {loading ? <p className="text-sm text-slate-500">Loading payment history...</p> : payments.length === 0 ? <p className="text-sm text-slate-500">No payment submissions yet.</p> : payments.map((item) => {
-              const invoiceName = typeof item.feeLedgerId === 'object' ? item.feeLedgerId?.invoiceNumber : undefined;
-              return (
-                <article key={item._id} className="rounded-xl bg-[#f8fafc] p-4 ring-1 ring-slate-200">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><div className="font-semibold text-[#11222d]">{invoiceName || item.reference}</div><div className="mt-1 text-xs text-slate-500">Portal ref: {item.reference}</div><div className="text-xs text-slate-500">Submitted ref: {item.studentReference || 'Not provided'} · {item.paymentMethod?.replace('_', ' ') || 'Legacy payment'}</div></div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${item.status === 'successful' ? 'bg-emerald-50 text-emerald-700' : item.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{item.status === 'pending' ? 'Awaiting review' : item.status}</span>
+
+          {/* ── Payment history ── */}
+          <div style={{ padding: '24px 28px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+              <div>
+                <p className="pg-eyebrow" style={{ marginBottom: 4 }}>Payment history</p>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Track previously submitted payment references.</p>
+              </div>
+              <form onSubmit={checkStatus} style={{ display: 'flex', gap: 8 }}>
+                <input required aria-label="Portal payment reference" value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Portal reference…" className="pg-input" style={{ minWidth: 0, width: 200 }} />
+                <button className="pg-btn pg-btn-outline">Check status</button>
+              </form>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {loading ? (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {[1, 2, 3].map(i => <div key={i} className="pg-shimmer" style={{ height: 88 }} />)}
+                </div>
+              ) : payments.length === 0 ? (
+                <div className="pg-empty">
+                  <CircleDollarSign size={36} />
+                  <p>No payment submissions yet.</p>
+                </div>
+              ) : payments.map((item) => {
+                const invoiceName = typeof item.feeLedgerId === 'object' ? item.feeLedgerId?.invoiceNumber : undefined;
+                const statusBadge =
+                  item.status === 'successful' ? 'pg-badge-green' :
+                  item.status === 'pending' ? 'pg-badge-amber' : 'pg-badge-red';
+                const statusLabel =
+                  item.status === 'successful' ? 'Verified' :
+                  item.status === 'pending' ? 'Awaiting review' : 'Rejected';
+                return (
+                  <div key={item._id} style={{ border: '1px solid #f0ebe4', borderRadius: 12, padding: '16px 20px', background: '#fdfcfb', transition: 'background 0.15s' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#11222d' }}>{invoiceName || item.reference}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Portal ref: {item.reference}</div>
+                        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 1 }}>
+                          Submitted ref: {item.studentReference || 'Not provided'} · {item.paymentMethod?.replace('_', ' ') || 'Legacy payment'}
+                        </div>
+                      </div>
+                      <span className={`pg-badge ${statusBadge}`}>{statusLabel}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f0ebe4', paddingTop: 12, fontSize: 13 }}>
+                      <span style={{ color: '#64748b' }}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Payment'}</span>
+                      <strong style={{ color: '#15803d', fontSize: 15 }}>GH¢ {Number(item.amount).toFixed(2)}</strong>
+                    </div>
+                    {item.verificationNote && (
+                      <div style={{ marginTop: 10, padding: '8px 12px', background: '#faf8f5', borderRadius: 8, borderLeft: '3px solid #a51c30', fontSize: 13, color: '#475569' }}>
+                        Staff note: {item.verificationNote}
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-sm"><span className="text-slate-500">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Payment'}</span><strong className="text-[#0d5a4d]">GH¢ {Number(item.amount).toFixed(2)}</strong></div>
-                  {item.verificationNote && <p className="mt-2 text-sm text-slate-600">Staff note: {item.verificationNote}</p>}
-                </article>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </section>
+        </div>
       </div>
 
-      <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-        <h3 className="text-lg font-bold text-[#11222d]">Payment notifications</h3>
-        <div className="mt-4 space-y-2">
-          {paymentNotices.length === 0 ? <p className="text-sm text-slate-500">Payment updates will appear here.</p> : paymentNotices.slice(0, 8).map((notice) => (
-            <div key={notice._id} className={`flex flex-wrap items-start justify-between gap-3 rounded-lg p-3 ${notice.readAt ? 'bg-[#f8fafc]' : 'bg-[#f5faf7] ring-1 ring-[#dfe7e1]'}`}>
-              <div><strong className="text-sm text-[#11222d]">{notice.title}</strong><p className="mt-1 text-sm text-slate-600">{notice.message}</p><span className="text-xs text-slate-400">{notice.createdAt ? new Date(notice.createdAt).toLocaleString() : ''}</span></div>
-              {!notice.readAt && <button onClick={() => markNoticeRead(notice)} className="text-sm font-semibold text-[#0d5a4d]">Mark read</button>}
-            </div>
-          ))}
+      {/* ── Notifications ── */}
+      {paymentNotices.length > 0 && (
+        <div className="pg-card">
+          <div style={{ padding: '20px 28px', borderBottom: '1px solid #f0ebe4' }}>
+            <p className="pg-eyebrow">Payment notifications</p>
+          </div>
+          <div>
+            {paymentNotices.slice(0, 8).map((notice) => (
+              <div key={notice._id} className="pg-row" style={{ background: notice.readAt ? 'transparent' : '#fffbf5' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#11222d' }}>{notice.title}</div>
+                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{notice.message}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                    {notice.createdAt ? new Date(notice.createdAt).toLocaleString() : ''}
+                  </div>
+                </div>
+                {!notice.readAt && (
+                  <button onClick={() => markNoticeRead(notice)} className="pg-btn pg-btn-ghost pg-btn-sm">Mark read</button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      </section>
+      )}
     </div>
   );
 }
+

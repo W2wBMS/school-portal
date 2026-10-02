@@ -141,6 +141,7 @@ export function canAccessRoute(role: Role | string, pathname: string) {
       '/dashboard/admin/results',
       '/dashboard/admin/requests',
       '/dashboard/admin/payments',
+      '/dashboard/admin/audit-logs',
     ],
     super_admin: [
       '/dashboard/admin',
@@ -152,6 +153,7 @@ export function canAccessRoute(role: Role | string, pathname: string) {
       '/dashboard/admin/results',
       '/dashboard/admin/requests',
       '/dashboard/admin/payments',
+      '/dashboard/admin/audit-logs',
     ],
     hod: [
       '/dashboard/admin',
@@ -163,6 +165,7 @@ export function canAccessRoute(role: Role | string, pathname: string) {
       '/dashboard/admin/results',
       '/dashboard/admin/requests',
       '/dashboard/admin/payments',
+      '/dashboard/admin/audit-logs',
     ],
     pro_vc: [
       '/dashboard/admin',
@@ -174,6 +177,7 @@ export function canAccessRoute(role: Role | string, pathname: string) {
       '/dashboard/admin/results',
       '/dashboard/admin/requests',
       '/dashboard/admin/payments',
+      '/dashboard/admin/audit-logs',
     ],
     vc: [
       '/dashboard/admin',
@@ -185,6 +189,7 @@ export function canAccessRoute(role: Role | string, pathname: string) {
       '/dashboard/admin/results',
       '/dashboard/admin/requests',
       '/dashboard/admin/payments',
+      '/dashboard/admin/audit-logs',
     ],
   };
 

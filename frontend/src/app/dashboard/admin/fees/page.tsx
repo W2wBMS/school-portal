@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 type Fee = { _id: string; invoiceNumber: string; amountDue: number; amountPaid: number; balance: number; status: string; semester: string; studentId?: { fullName?: string; email?: string } };
 
 export default function AdminFeesPage() {

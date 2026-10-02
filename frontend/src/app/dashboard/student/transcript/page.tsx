@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AcademicSummary, ResultRow } from '@/lib/portal';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 type Student = { fullName?: string; email?: string; studentId?: string; programme?: string; department?: string };
 
 export default function TranscriptPage() {

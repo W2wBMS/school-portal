@@ -2,43 +2,169 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, BookOpen, CircleDollarSign, ShieldCheck, Users } from 'lucide-react';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import {
+  ArrowUpRight, BookOpen, CircleDollarSign, ClipboardList,
+  ShieldCheck, Users, CalendarCheck2, CalendarDays,
+  TrendingUp, Activity,
+} from 'lucide-react';
+import { API_BASE } from '@/lib/config';
 
 export default function AdminDashboardPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [fees, setFees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
       const headers = { Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` };
-      const responses = await Promise.all([fetch(`${API_BASE}/users`, { credentials: 'include', headers }), fetch(`${API_BASE}/portal/courses`, { credentials: 'include', headers }), fetch(`${API_BASE}/portal/fees`, { credentials: 'include', headers })]);
+      const responses = await Promise.all([
+        fetch(`${API_BASE}/users`, { credentials: 'include', headers }),
+        fetch(`${API_BASE}/portal/courses`, { credentials: 'include', headers }),
+        fetch(`${API_BASE}/portal/fees`, { credentials: 'include', headers }),
+      ]);
       if (responses[0].ok) setUsers((await responses[0].json()).users || []);
       if (responses[1].ok) setCourses((await responses[1].json()).courses || []);
       if (responses[2].ok) setFees((await responses[2].json()).fees || []);
+      setLoading(false);
     }
-    loadDashboard().catch(console.error);
+    loadDashboard().catch(() => setLoading(false));
   }, []);
 
   const outstanding = fees.reduce((sum, fee) => sum + Number(fee.balance || 0), 0);
+  const students = users.filter(u => u.role === 'student').length;
+  const lecturers = users.filter(u => u.role === 'lecturer').length;
+
+  const stats = [
+    { label: 'Total users', value: loading ? '—' : users.length, icon: Users, tone: 'crimson', live: true },
+    { label: 'Active courses', value: loading ? '—' : courses.length, icon: BookOpen, tone: 'gold', live: true },
+    { label: 'Students enrolled', value: loading ? '—' : students, icon: TrendingUp, tone: 'green', live: false },
+    { label: 'Outstanding fees', value: loading ? '—' : `GH¢ ${outstanding.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: CircleDollarSign, tone: 'slate', live: true },
+  ];
+
+  const quickLinks = [
+    { label: 'User directory', desc: 'Manage accounts & roles', href: '/dashboard/admin/users', icon: Users },
+    { label: 'Attendance', desc: 'Review class records', href: '/dashboard/admin/attendance', icon: CalendarCheck2 },
+    { label: 'Fee management', desc: 'Track balances & ledger', href: '/dashboard/admin/fees', icon: CircleDollarSign },
+    { label: 'Timetable', desc: 'Schedule & sessions', href: '/dashboard/admin/timetable', icon: CalendarDays },
+    { label: 'Course catalogue', desc: 'Browse all courses', href: '/dashboard/admin/courses', icon: BookOpen },
+    { label: 'Service requests', desc: 'Pending student queries', href: '/dashboard/admin/requests', icon: ClipboardList },
+  ];
 
   return (
-    <div className="dashboard-page space-y-6">
-      <div className="relative overflow-hidden rounded-[28px] bg-[#0d5a4d] p-6 text-white sm:p-8">
-        <div className="absolute -bottom-28 -right-8 h-64 w-64 rounded-full border-[34px] border-[#d6b46a]/20" />
-        <p className="relative text-xs uppercase tracking-[0.2em] text-[#dfece7]">Operations console / 01</p>
-        <h2 className="relative mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">A clearer view of the institution.</h2>
-        <p className="relative mt-3 max-w-xl text-sm leading-6 text-[#dfece7]">Monitor people, learning, and financial operations from one dependable control surface.</p>
-        <div className="relative mt-6 flex flex-wrap gap-3"><Link href="/dashboard/admin/users" className="flex items-center gap-2 rounded-xl bg-[#f4efe7] px-4 py-3 text-sm font-bold text-[#123d35]">Manage users <ArrowUpRight size={16} /></Link><Link href="/dashboard/admin/courses" className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white ring-1 ring-white/20">Course catalogue <BookOpen size={16} /></Link></div>
+    <div className="pg-page">
+      {/* ── Hero ── */}
+      <div className="pg-hero">
+        <div className="pg-hero-orb pg-hero-orb-1" />
+        <div className="pg-hero-orb pg-hero-orb-2" />
+        <p className="pg-hero-eyebrow">Operations console</p>
+        <h2>A clearer view of the institution.</h2>
+        <p>Monitor people, learning, and financial operations from one dependable control surface.</p>
+        <div className="pg-hero-actions">
+          <Link href="/dashboard/admin/users" className="pg-hero-btn-primary">
+            Manage users <ArrowUpRight size={16} />
+          </Link>
+          <Link href="/dashboard/admin/courses" className="pg-hero-btn-ghost">
+            Course catalogue <BookOpen size={16} />
+          </Link>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {[{ label: 'Registered users', value: users.length, icon: Users, tone: 'bg-[#e6f1e9] text-[#0d5a4d]' }, { label: 'Active courses', value: courses.length, icon: BookOpen, tone: 'bg-[#e9eef1] text-[#38576a]' }, { label: 'Outstanding fees', value: `GH¢ ${outstanding.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, icon: CircleDollarSign, tone: 'bg-[#f6eddb] text-[#8a6a2f]' }].map((metric) => <div key={metric.label} className="rounded-[24px] bg-[#f8fafc] p-5 ring-1 ring-slate-200"><div className="flex items-start justify-between"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${metric.tone}`}><metric.icon size={19} /></div><span className="text-xs font-semibold text-[#8a9899]">LIVE</span></div><div className="mt-5 text-3xl font-bold tracking-tight text-[#11222d]">{metric.value}</div><div className="mt-1 text-sm text-slate-500">{metric.label}</div></div>)}
+      {/* ── Stat cards ── */}
+      <div className="pg-stats" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        {stats.map((s) => (
+          <div key={s.label} className="pg-stat">
+            <div className="pg-stat-top">
+              <div className={`pg-stat-icon ${s.tone}`}><s.icon size={20} /></div>
+              {s.live && <span className="pg-stat-live">Live</span>}
+            </div>
+            <div>
+              <div className="pg-stat-value">{s.value}</div>
+              <div className="pg-stat-label">{s.label}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2"><div className="rounded-[28px] bg-[#f8fafc] p-6 ring-1 ring-slate-200"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#718183]">Control centre</p><h3 className="mt-2 text-xl font-bold text-[#11222d]">Daily operations</h3></div><ShieldCheck className="text-[#0d5a4d]" size={22} /></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><Link href="/dashboard/admin/attendance" className="rounded-2xl bg-white p-4 ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-[#0d5a4d]"><div className="font-bold text-[#11222d]">Attendance oversight</div><div className="mt-1 text-sm text-slate-500">Review class records and trends.</div></Link><Link href="/dashboard/admin/fees" className="rounded-2xl bg-white p-4 ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-[#0d5a4d]"><div className="font-bold text-[#11222d]">Fee management</div><div className="mt-1 text-sm text-slate-500">Track balances and ledger entries.</div></Link></div></div><div className="rounded-[28px] bg-[#17252b] p-6 text-white"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b9d6c4]">System pulse</p><h3 className="mt-3 text-2xl font-bold">Everything in one place.</h3><p className="mt-3 text-sm leading-6 text-[#bfd0cb]">The portal keeps academic and administrative records close, current, and easy to act on.</p><div className="mt-6 flex items-center gap-2 text-sm font-semibold text-[#d6b46a]"><span className="h-2 w-2 rounded-full bg-[#d6b46a]" /> All services operational</div></div></div>
+      {/* ── Two-column lower section ── */}
+      <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+        {/* Quick links */}
+        <div className="pg-card">
+          <div className="pg-form-section" style={{ borderBottom: '1px solid #f0ebe4' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p className="pg-eyebrow">Control centre</p>
+                <h3 style={{ margin: '6px 0 0', fontFamily: 'Georgia, serif', fontSize: 20, letterSpacing: '-.03em', color: '#11222d' }}>
+                  Daily operations
+                </h3>
+              </div>
+              <ShieldCheck size={22} color="#a51c30" />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 0 }}>
+            {quickLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 8, padding: '18px 20px',
+                  borderBottom: '1px solid #f5f0eb', borderRight: '1px solid #f5f0eb',
+                  color: 'inherit', textDecoration: 'none', transition: 'background .15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#faf7f4')}
+                onMouseLeave={e => (e.currentTarget.style.background = '')}
+              >
+                <div style={{ display: 'grid', width: 36, height: 36, placeItems: 'center', borderRadius: 9, background: '#fde8ea', color: '#a51c30' }}>
+                  <link.icon size={17} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#11222d' }}>{link.label}</div>
+                  <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>{link.desc}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* System status */}
+        <div style={{ display: 'grid', gap: 16 }}>
+          {/* Status card */}
+          <div className="pg-card" style={{ background: 'linear-gradient(135deg, #11222d 0%, #1e3a5f 100%)', border: 'none', color: '#fff' }}>
+            <div style={{ padding: '28px 28px 24px' }}>
+              <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)', margin: '0 0 12px' }}>
+                System pulse
+              </p>
+              <h3 style={{ margin: '0 0 10px', fontFamily: 'Georgia, serif', fontSize: 22, letterSpacing: '-.03em' }}>
+                Everything in one place.
+              </h3>
+              <p style={{ margin: '0 0 22px', fontSize: 13.5, lineHeight: 1.65, color: 'rgba(255,255,255,.68)' }}>
+                Academic and administrative records — close, current, and easy to act on.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: '#d7bd82' }}>
+                <span style={{ display: 'block', width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 3px rgba(34,197,94,.2)' }} />
+                All services operational
+              </div>
+            </div>
+          </div>
+
+          {/* Lecturers stat */}
+          <div className="pg-card" style={{ padding: '22px 24px', display: 'flex', alignItems: 'center', gap: 18 }}>
+            <div style={{ display: 'grid', width: 52, height: 52, placeItems: 'center', borderRadius: 14, background: '#fde8ea', color: '#a51c30', flexShrink: 0 }}>
+              <Activity size={22} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.1em' }}>Faculty</p>
+              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-.04em', color: '#11222d' }}>
+                {loading ? '—' : lecturers}
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Lecturers registered</div>
+            </div>
+            <Link href="/dashboard/admin/users" style={{ display: 'grid', width: 34, height: 34, placeItems: 'center', borderRadius: 8, background: '#fde8ea', color: '#a51c30', flexShrink: 0 }}>
+              <ArrowUpRight size={16} />
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

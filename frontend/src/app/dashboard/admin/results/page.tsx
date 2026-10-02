@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import NotificationsPanel from '@/components/NotificationsPanel';
 import ResultApprovalStatus from '@/components/ResultApprovalStatus';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { API_BASE } from '@/lib/config';
 type Student = { _id: string; fullName: string; email: string };
 type Course = { _id: string; code: string; title: string; credits: number };
 type ApprovalType = 'hod' | 'lecturer' | 'admin';

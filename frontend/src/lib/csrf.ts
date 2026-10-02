@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:5000/api');
+import { API_BASE } from '@/lib/config';
 
 export async function fetchCsrfToken() {
   // Render free instances can take up to 45-60 seconds to wake up after being idle.
