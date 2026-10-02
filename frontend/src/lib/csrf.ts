@@ -28,5 +28,8 @@ export async function fetchCsrfToken() {
   }
 
   console.error('CSRF bootstrap failed', lastError);
+  if (lastError instanceof TypeError && lastError.message.includes('fetch')) {
+    throw new Error('Unable to connect to the backend server. Please verify your backend service is running and configured on Render.');
+  }
   throw new Error('The portal is waking up. Please wait a moment and try again.');
 }
