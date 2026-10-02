@@ -1,10 +1,9 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:5000/api');
 
 export async function fetchCsrfToken() {
-  // Render free instances can take a moment to wake after being idle. Retrying
-  // this harmless bootstrap request prevents a cold-start response from being
-  // shown to the student as a failed sign-in.
-  const attempts = 4;
+  // Render free instances can take up to 45-60 seconds to wake up after being idle.
+  // Retrying this harmless bootstrap request gives the backend time to cold-start.
+  const attempts = 12;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -24,7 +23,7 @@ export async function fetchCsrfToken() {
     }
 
     if (attempt < attempts - 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1500 * (attempt + 1)));
+      await new Promise((resolve) => window.setTimeout(resolve, 2500));
     }
   }
 
