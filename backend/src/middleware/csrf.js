@@ -7,10 +7,11 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 function setCsrfCookie(res) {
   const token = crypto.randomBytes(24).toString('hex');
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie('csrf_token', token, {
     httpOnly: false,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
     maxAge: 1000 * 60 * 60 * 24,
   });
   return token;
