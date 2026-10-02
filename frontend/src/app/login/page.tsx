@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, BadgeCheck, BookOpen, ChevronDown, GraduationCap, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BookOpen, ChevronDown, GraduationCap, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { getDashboardPath, type Role } from '@/lib/auth';
 import { fetchCsrfToken } from '@/lib/csrf';
 import PasswordInput from '@/components/PasswordInput';
@@ -19,6 +19,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimOpen, setClaimOpen] = useState(false);
+
+  useEffect(() => {
+    // Pre-warm backend service on mount (Render free-tier cold start mitigation)
+    fetchCsrfToken().catch(() => {});
+  }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -93,9 +98,32 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div><label htmlFor="identifier" className="login-label">Student ID or email</label><input id="identifier" type="text" value={loginForm.identifier} onChange={(event) => setLoginForm({ ...loginForm, identifier: event.target.value })} className="input-field" placeholder="e.g. 10290001" autoComplete="username" required /></div>
               <div><div className="mb-2 flex items-center justify-between"><label className="login-label mb-0">Password</label><Link href="/forgot-password" className="login-help-link">Forgot password?</Link></div><PasswordInput value={loginForm.password} onChange={(password) => setLoginForm({ ...loginForm, password })} className="input-field" placeholder="Enter your password" autoComplete="current-password" required /></div>
-              {error && <div role="alert" className="login-alert login-alert-error">{error}</div>}
+              {error && (
+                <div role="alert" className="login-alert login-alert-error space-y-2">
+                  <p>{error}</p>
+                  {(error.includes('waking up') || error.includes('connect')) && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleSubmit(e)}
+                      disabled={loading}
+                      className="mt-1 flex items-center gap-1.5 text-xs font-bold underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
+                    >
+                      <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                      {loading ? 'Waking backend & retrying...' : 'Click to retry connection'}
+                    </button>
+                  )}
+                </div>
+              )}
               {success && <div role="status" className="login-alert login-alert-success">{success}</div>}
-              <button type="submit" disabled={loading} className="primary-button login-submit w-full">{loading ? 'Signing you in...' : <>Sign in <ArrowRight size={18} /></>}</button>
+              <button type="submit" disabled={loading} className="primary-button login-submit w-full">
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw size={18} className="animate-spin" /> Waking portal & signing in...
+                  </span>
+                ) : (
+                  <>Sign in <ArrowRight size={18} /></>
+                )}
+              </button>
             </form>
 
             <div className="mt-8 border-t border-slate-200 pt-6">

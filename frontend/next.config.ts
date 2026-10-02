@@ -5,12 +5,9 @@ const nextConfig: NextConfig = {
     root: __dirname,
   },
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL;
-    if (process.env.NODE_ENV === 'production' && !backendUrl) {
-      throw new Error('BACKEND_URL must be set for production');
-    }
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, '') || 'https://rucst-student-portal-api.onrender.com';
 
-    const destinationUrl = (backendUrl || 'http://localhost:5000').replace(/\/+$/, '');
+    const destinationUrl = backendUrl.replace(/\/+$/, '');
     return [
       {
         source: '/api/:path*',
