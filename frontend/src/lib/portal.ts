@@ -24,6 +24,7 @@ export type FeeLedgerRow = { invoiceNumber: string; amountDue: number; amountPai
 export type AcademicSummary = { totalCredits: number; cgpa: number; semesters: Array<{ semester: string; level?: string; academicYear?: string; credits: number; gpa: number; results: ResultRow[] }> };
 
 import { API_BASE } from '@/lib/config';
+import { parseJsonResponse } from '@/lib/api';
 
 export async function fetchStudentOverview() {
   const token = localStorage.getItem('portal_token') || '';
@@ -36,9 +37,5 @@ export async function fetchStudentOverview() {
     },
   });
 
-  if (!response.ok) {
-    throw new Error('Unable to fetch student overview');
-  }
-
-  return (await response.json()) as StudentOverview;
+  return await parseJsonResponse<StudentOverview>(response, 'Unable to fetch student overview');
 }

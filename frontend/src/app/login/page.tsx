@@ -9,6 +9,7 @@ import { fetchCsrfToken } from '@/lib/csrf';
 import PasswordInput from '@/components/PasswordInput';
 
 import { API_BASE } from '@/lib/config';
+import { parseJsonResponse } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,8 +38,7 @@ export default function LoginPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, credentials: 'include',
         body: JSON.stringify(identifier.includes('@') ? { email: identifier, password: loginForm.password } : { studentId: identifier, password: loginForm.password }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Login failed');
+      const data = await parseJsonResponse(response, 'Login failed');
       localStorage.setItem('portal_user', JSON.stringify(data.user));
       localStorage.removeItem('portal_token');
       router.push(getDashboardPath((data.user.role as Role) || 'student'));
@@ -55,8 +55,7 @@ export default function LoginPage() {
       const response = await fetch(`${API_BASE}/v1/auth/claim-account`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }, credentials: 'include', body: JSON.stringify(claimForm),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Unable to create your account');
+      const data = await parseJsonResponse(response, 'Unable to create your account');
       setSuccess(`Your account is ready. Your student ID is ${data.studentId}. You can now sign in.`);
       setLoginForm({ identifier: data.studentId, password: claimForm.password });
       setClaimForm({ fullName: '', programme: '', department: '', level: '', password: '' });

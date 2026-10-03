@@ -8,6 +8,7 @@ import { fetchCsrfToken } from '@/lib/csrf';
 import PasswordInput from '@/components/PasswordInput';
 
 import { API_BASE } from '@/lib/config';
+import { parseJsonResponse } from '@/lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -37,11 +38,7 @@ export default function RegisterPage() {
         body: JSON.stringify(form),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
+      const data = await parseJsonResponse(response, 'Registration failed');
 
       const user = data.user;
       localStorage.setItem('portal_user', JSON.stringify(user));

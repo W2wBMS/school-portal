@@ -11,8 +11,11 @@ export async function fetchCsrfToken() {
         cache: 'no-store',
       });
       if (response.ok) {
-        const data = await response.json();
-        if (data && data.csrfToken) return data.csrfToken as string;
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          if (data && data.csrfToken) return data.csrfToken as string;
+        }
       } else {
         lastError = new Error(`CSRF endpoint returned ${response.status}`);
       }
