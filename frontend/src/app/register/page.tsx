@@ -42,7 +42,9 @@ export default function RegisterPage() {
 
       const user = data.user;
       localStorage.setItem('portal_user', JSON.stringify(user));
-      localStorage.removeItem('portal_token');
+      if (data.token) {
+        localStorage.setItem('portal_token', data.token);
+      }
       router.push(getDashboardPath((user.role as Role) || 'student'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

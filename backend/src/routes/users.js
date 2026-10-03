@@ -73,16 +73,37 @@ router.get('/audit-logs', protect, authorizePermission('audit.view'), async (req
   const filter = {};
   if (typeof req.query.entity === 'string' && req.query.entity.trim()) filter.entity = req.query.entity.trim();
   if (typeof req.query.action === 'string' && req.query.action.trim()) filter.action = { $regex: req.query.action.trim(), $options: 'i' };
-  const logs = await AuditLog.aggregate([
-    { $match: filter },
-    { $lookup: { from: 'users', localField: 'actorId', foreignField: '_id', as: 'actor' } },
-    { $unwind: '$actor' },
-    { $match: { 'actor.role': { $ne: 'student' } } },
-    { $sort: { createdAt: -1 } },
-    { $limit: limit },
-    { $project: { action: 1, entity: 1, entityId: 1, metadata: 1, createdAt: 1, actorId: { fullName: '$actor.fullName', email: '$actor.email', role: '$actor.role' } } },
-  ]);
-  return res.json({ logs });
+
+  try {
+    const rawLogs = await AuditLog.find(filter)
+      .populate('actorId', 'fullName email role')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const logs = rawLogs
+      .filter((log) => !log.actorId || log.actorId.role !== 'student')
+      .map((log) => ({
+        _id: log._id,
+        action: log.action,
+        entity: log.entity,
+        entityId: log.entityId,
+        metadata: log.metadata,
+        createdAt: log.createdAt,
+        actorId: log.actorId
+          ? {
+              fullName: log.actorId.fullName,
+              email: log.actorId.email,
+              role: log.actorId.role,
+            }
+          : null,
+      }));
+
+    return res.json({ logs });
+  } catch (error) {
+    console.error('Audit logs query error:', error.message);
+    return res.status(500).json({ message: 'Unable to retrieve audit logs.' });
+  }
 });
 
 router.post('/', protect, authorize('student_affairs', 'department_admin', 'academic_officer', 'system_admin', 'super_admin', 'hod', 'pro_vc', 'vc'), async (req, res) => {

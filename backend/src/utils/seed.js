@@ -36,6 +36,22 @@ async function seedAdmin() {
   } else {
     console.log('Bootstrap super admin already exists in MongoDB');
   }
+
+  try {
+    const AuditLog = require('../models/AuditLog');
+    const auditCount = await AuditLog.countDocuments();
+    if (auditCount === 0 && admin) {
+      await AuditLog.create({
+        actorId: admin._id,
+        action: 'system.initialized',
+        entity: 'System',
+        metadata: { message: 'Campusly administrative workspace initialized' },
+      });
+      console.log('Initial system audit log created');
+    }
+  } catch (error) {
+    console.error('Audit log seed check error:', error.message);
+  }
 }
 
 module.exports = { seedAdmin };

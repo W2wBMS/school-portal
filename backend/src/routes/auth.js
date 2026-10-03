@@ -75,10 +75,11 @@ router.post('/register', async (req, res) => {
 
     const token = createToken(user);
 
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
     setCsrfCookie(res);
@@ -86,6 +87,7 @@ router.post('/register', async (req, res) => {
 
     return res.status(201).json({
       message: 'User registered successfully',
+      token,
       user: user.toPublicJSON(),
     });
   } catch (error) {
@@ -193,12 +195,11 @@ router.post('/login', loginLimiter, async (req, res) => {
     user.lockUntil = null;
     await user.save();
 
-    const token = createToken(user);
-
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd,
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
     setCsrfCookie(res);
@@ -206,6 +207,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     return res.json({
       message: 'Login successful',
+      token,
       user: user.toPublicJSON(),
     });
   } catch (error) {
@@ -216,8 +218,14 @@ router.post('/login', loginLimiter, async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('token');
-  res.clearCookie('csrf_token');
+  const isProd = process.env.NODE_ENV === 'production';
+  const cookieOptions = {
+    httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
+  };
+  res.clearCookie('token', cookieOptions);
+  res.clearCookie('csrf_token', { ...cookieOptions, httpOnly: false });
   return res.json({ message: 'Logged out successfully' });
 });
 

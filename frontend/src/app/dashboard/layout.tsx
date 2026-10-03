@@ -77,7 +77,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUser(parsed);
         const dashboardPath = getDashboardPath(parsed.role);
         if (pathname === "/dashboard" || !canAccessRoute(parsed.role, pathname)) { router.replace(dashboardPath); return; }
-        const response = await fetch(`${API_BASE}/v1/auth/me`, { credentials: "include" });
+        const token = localStorage.getItem("portal_token") || "";
+        const response = await fetch(`${API_BASE}/v1/auth/me`, {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (response.ok) {
           const data = await response.json();
           setUser(data.user as UserSession);
@@ -94,7 +98,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname, router]);
 
   async function handleLogout() {
-    try { const csrfToken = await fetchCsrfToken(); await fetch(`${API_BASE}/v1/auth/logout`, { method: "POST", credentials: "include", headers: { "X-CSRF-Token": csrfToken } }); } catch {}
+    try {
+      const csrfToken = await fetchCsrfToken();
+      const token = localStorage.getItem("portal_token") || "";
+      await fetch(`${API_BASE}/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "X-CSRF-Token": csrfToken,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    } catch {}
     localStorage.removeItem("portal_user"); localStorage.removeItem("portal_token"); router.replace("/login");
   }
 

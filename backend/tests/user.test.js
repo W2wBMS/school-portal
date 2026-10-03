@@ -34,6 +34,13 @@ async function disconnectTestDatabase() {
   }
 }
 
+test.after(async () => {
+  await disconnectTestDatabase();
+  if (memoryServer) {
+    await memoryServer.stop();
+  }
+});
+
 test('User password hashes during save without a next callback', async () => {
   await connectTestDatabase();
   await mongoose.connection.db.dropDatabase().catch(() => {});
