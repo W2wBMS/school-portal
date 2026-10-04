@@ -20,9 +20,11 @@ services:
       - key: FRONTEND_URL
         value: https://rucst-student-portal-web.onrender.com
       - key: BOOTSTRAP_ADMIN_EMAIL
-        sync: false
+        value: admin@rucst.edu.gh
       - key: BOOTSTRAP_ADMIN_PASSWORD
-        sync: false
+        value: Admin@1234
+      - key: BOOTSTRAP_ADMIN_RESET_PASSWORD
+        value: "true"
 
   - type: web
     name: rucst-student-portal-web
