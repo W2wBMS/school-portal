@@ -72,17 +72,29 @@ router.get('/audit-logs', protect, authorizePermission('audit.view'), async (req
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100);
   const filter = {};
   if (typeof req.query.entity === 'string' && req.query.entity.trim()) filter.entity = req.query.entity.trim();
-  if (typeof req.query.action === 'string' && req.query.action.trim()) filter.action = { $regex: req.query.action.trim(), $options: 'i' };
+  if (typeof req.query.action === 'string' && req.query.action.trim()) {
+    const escaped = req.query.action.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.action = { $regex: escaped, $options: 'i' };
+  }
 
   try {
-    const rawLogs = await AuditLog.find(filter)
-      .populate('actorId', 'fullName email role')
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+    let rawLogs = [];
+    try {
+      rawLogs = await AuditLog.find(filter)
+        .populate('actorId', 'fullName email role')
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+    } catch (popErr) {
+      console.warn('Populate failed on audit logs, falling back to basic query:', popErr.message);
+      rawLogs = await AuditLog.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     const logs = rawLogs
-      .filter((log) => !log.actorId || log.actorId.role !== 'student')
+      .filter((log) => !log.actorId || typeof log.actorId !== 'object' || log.actorId.role !== 'student')
       .map((log) => ({
         _id: log._id,
         action: log.action,
@@ -90,7 +102,7 @@ router.get('/audit-logs', protect, authorizePermission('audit.view'), async (req
         entityId: log.entityId,
         metadata: log.metadata,
         createdAt: log.createdAt,
-        actorId: log.actorId
+        actorId: log.actorId && typeof log.actorId === 'object'
           ? {
               fullName: log.actorId.fullName,
               email: log.actorId.email,
@@ -101,7 +113,7 @@ router.get('/audit-logs', protect, authorizePermission('audit.view'), async (req
 
     return res.json({ logs });
   } catch (error) {
-    console.error('Audit logs query error:', error.message);
+    console.error('Audit logs query error:', error);
     return res.status(500).json({ message: 'Unable to retrieve audit logs.' });
   }
 });

@@ -2,33 +2,54 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import {
-  ArrowUpRight, BookOpen, CircleDollarSign, ClipboardList,
-  ShieldCheck, Users, CalendarCheck2, CalendarDays,
-  TrendingUp, Activity,
-} from 'lucide-react';
+import { AlertCircle, ArrowUpRight, BookOpen, CircleDollarSign, ClipboardList, RotateCw, ShieldCheck, Users, CalendarCheck2, CalendarDays, TrendingUp, Activity } from 'lucide-react';
 import { API_BASE } from '@/lib/config';
+import { parseJsonResponse } from '@/lib/api';
 
 export default function AdminDashboardPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [fees, setFees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadDashboard() {
-      const headers = { Authorization: `Bearer ${localStorage.getItem('portal_token') || ''}` };
-      const responses = await Promise.all([
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('portal_token') || '';
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const [usersRes, coursesRes, feesRes] = await Promise.all([
         fetch(`${API_BASE}/users`, { credentials: 'include', headers }),
         fetch(`${API_BASE}/portal/courses`, { credentials: 'include', headers }),
         fetch(`${API_BASE}/portal/fees`, { credentials: 'include', headers }),
       ]);
-      if (responses[0].ok) setUsers((await responses[0].json()).users || []);
-      if (responses[1].ok) setCourses((await responses[1].json()).courses || []);
-      if (responses[2].ok) setFees((await responses[2].json()).fees || []);
+
+      const [usersData, coursesData, feesData] = await Promise.all([
+        parseJsonResponse<{ users: any[] }>(usersRes, 'Unable to load users directory').catch(() => ({ users: [] })),
+        parseJsonResponse<{ courses: any[] }>(coursesRes, 'Unable to load courses').catch(() => ({ courses: [] })),
+        parseJsonResponse<{ fees: any[] }>(feesRes, 'Unable to load fees').catch(() => ({ fees: [] })),
+      ]);
+
+      setUsers(usersData.users || []);
+      setCourses(coursesData.courses || []);
+      setFees(feesData.fees || []);
+
+      if (!usersRes.ok && usersRes.status === 401) {
+        setError('Your session has expired. Please sign out and sign back in to refresh live operational data.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to connect to live service.';
+      setError(msg);
+    } finally {
       setLoading(false);
     }
-    loadDashboard().catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadDashboard();
   }, []);
 
   const outstanding = fees.reduce((sum, fee) => sum + Number(fee.balance || 0), 0);
@@ -69,6 +90,36 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {error && (
+        <div style={{ marginBottom: 20 }}>
+          <div className="pg-alert pg-alert-error" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadDashboard()}
+              disabled={loading}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#fff',
+                border: '1px solid #dcd7cf',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: loading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <RotateCw size={13} className={loading ? 'animate-spin' : ''} /> Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Stat cards ── */}
       <div className="pg-stats" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>

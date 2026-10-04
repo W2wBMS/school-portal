@@ -195,6 +195,8 @@ router.post('/login', loginLimiter, async (req, res) => {
     user.lockUntil = null;
     await user.save();
 
+    const token = createToken(user);
+
     const isProd = process.env.NODE_ENV === 'production';
     res.cookie('token', token, {
       httpOnly: true,

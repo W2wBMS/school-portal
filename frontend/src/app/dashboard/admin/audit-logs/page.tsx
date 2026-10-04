@@ -43,7 +43,13 @@ export default function AuditLogsPage() {
       setLogs(data.logs || []);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Unable to load audit logs.";
-      if (message.includes("Authentication required") || message.includes("permission")) {
+      if (
+        message.includes("Authentication required") ||
+        message.includes("permission") ||
+        message.includes("token") ||
+        message.includes("401") ||
+        message.includes("Unauthorized")
+      ) {
         setError(`${message} (Please sign out and sign back in to refresh your administrative access token).`);
       } else {
         setError(message);
