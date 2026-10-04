@@ -33,9 +33,13 @@ app.use(morgan('dev'));
 
 app.get('/api/health', async (req, res) => {
   let database = getDatabaseStatus();
+  let usersCount = 0;
+  let adminExists = false;
   if (database === 'connected') {
     try {
       await mongoose.connection.db.admin().ping();
+      usersCount = await User.countDocuments();
+      adminExists = !!(await User.findOne({ email: 'admin@rucst.edu.gh' }));
     } catch {
       database = 'unavailable';
     }
@@ -43,7 +47,8 @@ app.get('/api/health', async (req, res) => {
   res.status(database === 'connected' ? 200 : 503).json({
     ok: database === 'connected',
     message: 'Student Portal API is running',
-    services: { database },
+    services: { database, totalUsers: usersCount, adminReady: adminExists },
+    version: '1.2.0',
     timestamp: new Date().toISOString(),
   });
 });

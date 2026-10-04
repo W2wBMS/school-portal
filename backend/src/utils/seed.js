@@ -8,17 +8,24 @@ async function seedAdmin() {
   let admin = await User.findOne({ email });
 
   if (!admin) {
-    admin = await User.create({
-      fullName: 'System Administrator',
-      email,
-      password,
-      role: 'super_admin',
-      isVerified: true,
-      status: 'active',
-    });
+    try {
+      admin = await User.create({
+        fullName: 'System Administrator',
+        email,
+        password,
+        role: 'super_admin',
+        studentId: 'ADMIN001',
+        isVerified: true,
+        status: 'active',
+      });
+      console.log(`Default super admin (${email}) created successfully`);
+    } catch (createErr) {
+      console.error('Failed to create super admin with ADMIN001:', createErr.message);
+      admin = await User.findOne({ email });
+    }
+  }
 
-    console.log(`Default super admin (${email}) created successfully`);
-  } else {
+  if (admin) {
     // Verify password matches or reset if requested or locked out by failed attempts
     const isMatch = await admin.comparePassword(password);
     const isLocked = admin.lockUntil && admin.lockUntil > new Date();
