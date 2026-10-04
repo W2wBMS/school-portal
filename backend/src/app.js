@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const { csrfProtection, setCsrfCookie } = require('./middleware/csrf');
 const { getDatabaseStatus, isDatabaseUnavailable } = require('./utils/databaseStatus');
 const { getAllowedOrigins } = require('./utils/corsOrigins');
+const { isMemoryMode } = require('./config/db');
 
 dotenv.config();
 
@@ -44,11 +45,12 @@ app.get('/api/health', async (req, res) => {
       database = 'unavailable';
     }
   }
+  const persistent = !isMemoryMode();
   res.status(database === 'connected' ? 200 : 503).json({
     ok: database === 'connected',
     message: 'Student Portal API is running',
-    services: { database, totalUsers: usersCount, adminReady: adminExists },
-    version: '1.2.0',
+    services: { database, storage: persistent ? 'atlas (persistent)' : 'in-memory (volatile)', totalUsers: usersCount, adminReady: adminExists },
+    version: '1.3.0',
     timestamp: new Date().toISOString(),
   });
 });
