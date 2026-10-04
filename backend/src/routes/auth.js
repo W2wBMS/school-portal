@@ -14,7 +14,7 @@ const { normalizeAdmissionValue, normalizeAdmissionLevel } = require('../utils/a
 const { z } = require('zod');
 
 const router = express.Router();
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: 'Too many login attempts. Try again later.' } });
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: 'Too many login attempts. Try again in a few minutes.' } });
 const MAX_LOGIN_FAILURES = 5;
 const LOCKOUT_MINUTES = 15;
 const registerSchema = z.object({ fullName: z.string().trim().min(2).max(120), email: z.string().trim().email(), password: z.string().min(8).max(128), studentId: z.string().trim().regex(/^1029\d{4}$/).optional().or(z.literal('')), department: z.string().trim().max(120).optional(), programme: z.string().trim().max(160).optional(), level: z.string().trim().max(40).optional() });
